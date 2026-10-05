@@ -1,0 +1,2640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sallee Local Dispatch Board</title>
+<style>
+  :root{
+    --green-dark:#0e3b2e;
+    --green:#14523f;
+    --green-light:#1e6b52;
+    --gold:#c8a24a;
+    --gold-light:#e8d9a8;
+    --cream:#f7f4ec;
+    --ink:#1c2420;
+    --line:#d8d2c0;
+    --weekend:#f0e8d0;
+    --card-normal:#ffffff;
+    --card-spare:#eef3f0;
+    --card-vacation:#f5e0d8;
+    --card-note:#fff8e0;
+    --danger:#a23b2e;
+    --ky:#0e3b2e;
+    --fl:#8a5a00;
+    --ny:#1b3a6b;
+    --pt:#6b5b8a;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--cream);color:var(--ink);}
+
+  .topbar{
+    background:var(--green-dark);
+    color:var(--gold-light);
+    padding:10px 18px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    position:sticky;
+    top:0;
+    z-index:60;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+  .topbar h1{
+    font-size:18px;
+    letter-spacing:1.5px;
+    margin:0;
+    color:#fff;
+    font-weight:700;
+    text-transform:uppercase;
+  }
+  .topbar h1 span{color:var(--gold);}
+  .nav-group{display:flex;align-items:center;gap:6px;margin-left:8px;}
+  .range-label{font-size:13px;font-weight:600;color:var(--gold-light);min-width:190px;text-align:center;}
+  .btn{
+    background:var(--green-light);
+    border:1px solid rgba(255,255,255,.15);
+    color:#fff;
+    padding:7px 12px;
+    border-radius:6px;
+    font-size:12.5px;
+    cursor:pointer;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .btn:hover{background:var(--gold);color:var(--green-dark);}
+  .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.3);}
+  .btn.ghost:hover{background:rgba(255,255,255,.1);color:#fff;}
+  .spacer{flex:1;}
+  .status-note{font-size:11px;color:rgba(255,255,255,.55);}
+
+  #topScrollSync{
+    overflow-x:auto;
+    overflow-y:hidden;
+    height:16px;
+    background:var(--green-dark);
+    border-bottom:2px solid var(--gold);
+    position:sticky;
+    top:54px;
+    z-index:59;
+  }
+  #topScrollSync::-webkit-scrollbar{height:14px;}
+  #topScrollSync::-webkit-scrollbar-track{background:var(--green-dark);}
+  #topScrollSync::-webkit-scrollbar-thumb{background:var(--gold);border-radius:7px;border:3px solid var(--green-dark);}
+  #topScrollSyncInner{height:1px;}
+
+  .board-wrap{
+    overflow:auto;
+    height:calc(100vh - 54px);
+    position:relative;
+  }
+  table.board{
+    border-collapse:separate;
+    border-spacing:0;
+    table-layout:fixed;
+  }
+
+  .region-spacer{
+    position:sticky;top:0;left:0;z-index:35;
+    background:var(--green-dark);
+    width:84px;min-width:84px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  th.region-label{
+    position:sticky;top:0;z-index:25;
+    color:#fff;
+    font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+    text-align:center;
+    padding:5px 0;
+    border-bottom:1px solid rgba(255,255,255,.12);
+    border-right:2px solid var(--gold);
+  }
+  th.region-label.region-unassigned{background:#5c5648;}
+  .region-end-spacer{
+    position:sticky;top:0;z-index:25;
+    background:var(--green-dark);
+    width:46px;min-width:46px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+
+  td.corner-cell{
+    position:sticky;top:29px;left:0;z-index:35;
+    background:var(--green-dark);
+    width:84px;min-width:84px;
+    border-bottom:2px solid var(--gold);
+    border-right:2px solid var(--gold);
+    height:0;
+    padding:0;
+  }
+  th.driver-head{
+    position:sticky;top:29px;z-index:20;
+    background:var(--green-dark);
+    color:#fff;
+    width:150px;min-width:150px;
+    padding:7px 6px;
+    border-bottom:2px solid var(--gold);
+    border-right:1px solid rgba(255,255,255,.12);
+    text-align:center;
+    vertical-align:top;
+    cursor:pointer;
+    user-select:none;
+  }
+  th.driver-head:hover{background:var(--green);}
+  th.driver-head .dname{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  th.driver-head .dname2{font-size:10.5px;color:var(--gold-light);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  th.driver-head .dtruck{font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;font-family:ui-monospace,Consolas,monospace;}
+  .add-driver-cell{
+    position:sticky;top:29px;z-index:20;
+    background:var(--green-dark);
+    width:46px;min-width:46px;
+    border-bottom:2px solid var(--gold);
+    text-align:center;
+    vertical-align:middle;
+  }
+  .add-driver-cell button{
+    background:transparent;border:1.5px dashed var(--gold);color:var(--gold);
+    border-radius:6px;width:30px;height:30px;font-size:17px;cursor:pointer;
+  }
+  .add-driver-cell button:hover{background:var(--gold);color:var(--green-dark);}
+
+  td.date-cell{
+    position:sticky;left:0;z-index:15;
+    background:var(--cream);
+    border-right:2px solid var(--gold);
+    border-bottom:1px solid var(--line);
+    padding:6px 6px;
+    vertical-align:top;
+    width:84px;min-width:84px;
+  }
+  td.date-cell .dow{font-size:10.5px;font-weight:700;letter-spacing:.5px;color:var(--green);}
+  td.date-cell .dnum{font-size:15px;font-weight:800;color:var(--ink);}
+  td.date-cell.weekend{background:var(--weekend);}
+  td.date-cell.weekend .dow{color:var(--danger);}
+
+  td.job-cell{
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+    padding:5px;
+    min-width:150px;
+    max-width:150px;
+    transition:background .1s;
+  }
+  tr:nth-child(even) td.job-cell{background:rgba(0,0,0,.012);}
+  td.job-cell.dragover{background:var(--gold-light)!important;outline:2px dashed var(--gold);outline-offset:-2px;}
+  tr.row-weekend td.job-cell{background:var(--weekend)!important;}
+
+  .add-job-btn{
+    width:100%;
+    border:1.5px dashed #c3bda4;
+    background:transparent;
+    color:#948d70;
+    border-radius:5px;
+    font-size:15px;
+    line-height:1;
+    padding:4px 0;
+    cursor:pointer;
+    margin-top:2px;
+  }
+  .add-job-btn:hover{border-color:var(--green);color:var(--green);background:#fff;}
+
+  .job-card{
+    background:var(--card-normal);
+    border:1px solid #d9d3bf;
+    border-left:4px solid var(--green);
+    border-radius:5px;
+    padding:6px 7px;
+    margin-bottom:4px;
+    font-size:10px;
+    line-height:1.35;
+    cursor:grab;
+    box-shadow:0 1px 2px rgba(0,0,0,.06);
+  }
+  .job-card:active{cursor:grabbing;}
+  .job-card.dragging{opacity:.35;}
+  .job-card.type-spare{border-left-color:#7a8f86;background:var(--card-spare);}
+  .job-card.type-vacation{border-left-color:var(--danger);background:var(--card-vacation);}
+  .job-card.type-note{border-left-color:var(--gold);background:var(--card-note);}
+  .job-card.type-pm{border-left-color:#2a6f97;background:#e9f2f8;}
+  .job-card.type-safety_inspection{border-left-color:#b5541a;background:#fbede0;}
+  .job-card .maint-banner{
+    font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;
+    margin-bottom:3px;
+  }
+  .job-card.type-pm .maint-banner{color:#2a6f97;}
+  .job-card.type-safety_inspection .maint-banner{color:#b5541a;}
+  .job-card .maint-detail{font-size:9.5px;color:#5c574a;margin-bottom:2px;}
+  .job-card .route{font-weight:700;color:var(--green-dark);font-size:10.5px;white-space:normal;word-break:break-word;}
+  .job-card .route .arrow{color:var(--gold);margin:0 2px;}
+  .job-card .meta{color:#5c574a;font-size:9px;margin-top:2px;white-space:normal;word-break:break-word;}
+  .job-card .horse{font-style:italic;color:#3a3630;font-size:9px;margin-top:1px;white-space:normal;}
+  .job-card .notes{color:#7a5c2e;font-size:9px;margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .job-card .lb-ref{
+    display:inline-block;margin-top:3px;
+    font-size:9px;font-weight:700;color:var(--green-dark);
+    background:var(--gold-light);border-radius:4px;padding:2px 5px;
+    text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+  }
+  .job-card .lb-ref:hover{background:var(--gold);}
+  .job-card .lb-ref[data-order-id]{cursor:pointer;}
+  .turnaround-warning{
+    margin-top:4px;font-size:9px;font-weight:700;color:#8a4b00;
+    background:#fdead0;border:1px solid #f0c688;border-radius:4px;
+    padding:3px 6px;cursor:help;
+  }
+  .turnaround-warning.unverifiable{color:#6b6555;background:#efece0;border-color:#d8d2c0;}
+  .turnaround-warning.not-possible{color:#fff;background:var(--danger);border-color:#7d2c22;font-weight:800;}
+  .job-card.turnaround-ok{outline:2px solid #3fa66b;outline-offset:-1px;}
+  .job-card.turnaround-tight{outline:2px solid #d18a00;outline-offset:-1px;}
+  .job-card.turnaround-not-possible{outline:2px solid var(--danger);outline-offset:-1px;}
+
+  .toast{
+    position:fixed;top:18px;left:50%;transform:translateX(-50%);
+    background:var(--danger);color:#fff;
+    padding:12px 20px;border-radius:8px;
+    font-size:13.5px;font-weight:600;line-height:1.4;
+    box-shadow:0 8px 24px rgba(0,0,0,.3);
+    z-index:300;max-width:520px;text-align:center;
+    display:flex;align-items:center;gap:10px;
+  }
+  .toast .toast-close{cursor:pointer;font-weight:900;font-size:16px;line-height:1;color:rgba(255,255,255,.8);flex-shrink:0;}
+  .toast .toast-close:hover{color:#fff;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(14,20,17,.55);
+    display:none;align-items:center;justify-content:center;z-index:200;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:#fff;border-radius:10px;width:380px;max-width:92vw;
+    padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.35);
+    max-height:90vh;overflow-y:auto;
+  }
+  .modal h2{margin:0 0 14px;font-size:16px;color:var(--green-dark);}
+  .modal label{display:block;font-size:11px;font-weight:700;color:#6b6555;text-transform:uppercase;letter-spacing:.4px;margin:10px 0 3px;}
+  .modal input, .modal select, .modal textarea{
+    width:100%;padding:7px 8px;border:1px solid #cfc9b8;border-radius:5px;font-size:13px;font-family:inherit;
+  }
+  .modal textarea{resize:vertical;min-height:44px;}
+  .modal-row{display:flex;gap:8px;}
+  .modal-row > div{flex:1;}
+  .modal-actions{display:flex;justify-content:space-between;margin-top:18px;gap:8px;}
+  .modal-actions .left{display:flex;gap:8px;}
+  .btn-primary{background:var(--green-dark);color:#fff;border:none;padding:9px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;}
+  .btn-primary:hover{background:var(--green);}
+  .btn-secondary{background:#ece7d8;color:var(--ink);border:none;padding:9px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;}
+  .btn-secondary:hover{background:#ddd6c0;}
+  .btn-delete{background:transparent;color:var(--danger);border:1px solid var(--danger);padding:9px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;}
+  .btn-delete:hover{background:var(--danger);color:#fff;}
+  /* ---------- local board: group colours ---------- */
+  th.region-label.region-LOCAL{background:var(--ky);}
+  th.region-label.region-LOCAL_OTR{background:var(--ny);}
+  th.region-label.region-AGENT{background:var(--fl);}
+  th.region-label.region-PT{background:#6b5b8a;}
+  .job-card .cust{font-weight:700;color:var(--green-dark);font-size:10.5px;letter-spacing:.2px;margin-bottom:1px;white-space:normal;}
+
+  /* ---------- Excel import modal ---------- */
+  .xl-box{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;background:#fbf9f2;font-size:12px;line-height:1.55;color:#3a362c;margin-top:8px;max-height:260px;overflow:auto;}
+  .xl-box b{color:var(--green-dark);}
+  .xl-warn{color:#8a5a00;}
+  .xl-chk{display:flex;gap:8px;align-items:flex-start;font-size:12px;margin-top:10px;color:#3a362c;text-transform:none;font-weight:400;letter-spacing:0;}
+  .toast.ok{background:var(--green-light);}
+  .xl-chk input{width:auto;margin-top:2px;}
+  .xl-prog{height:8px;border-radius:5px;background:#e6e0cc;margin-top:10px;overflow:hidden;display:none;}
+  .xl-prog>div{height:100%;width:0;background:var(--green-light);transition:width .25s;}
+
+  /* ---------- sign-in intro: a van pulls in ---------- */
+  .intro{position:fixed;inset:0;z-index:300;display:none;overflow:hidden;cursor:pointer;
+    background:linear-gradient(180deg,#07140f 0%,#0e3b2e 52%,#1c5a43 70%,#2a7557 100%);color:#fff;}
+  .intro.show{display:block;}
+  .intro .stars{position:absolute;inset:0 0 45% 0;background-image:
+      radial-gradient(1.4px 1.4px at 12% 18%,#fff 50%,transparent 51%),radial-gradient(1.2px 1.2px at 28% 8%,#e8d9a8 50%,transparent 51%),
+      radial-gradient(1.6px 1.6px at 44% 22%,#fff 50%,transparent 51%),radial-gradient(1.2px 1.2px at 63% 12%,#fff 50%,transparent 51%),
+      radial-gradient(1.4px 1.4px at 78% 24%,#e8d9a8 50%,transparent 51%),radial-gradient(1.2px 1.2px at 90% 9%,#fff 50%,transparent 51%),
+      radial-gradient(1px 1px at 6% 34%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 55% 33%,#fff 50%,transparent 51%);
+    animation:twinkle 3s ease-in-out infinite alternate;}
+  @keyframes twinkle{from{opacity:.55}to{opacity:1}}
+  .intro .moon{position:absolute;top:9%;right:11%;width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fffbe8,#e8d9a8 70%);box-shadow:0 0 60px 14px rgba(232,217,168,.28);}
+  .intro .hills{position:absolute;left:0;right:0;bottom:30%;height:22%;}
+  .intro .ground{position:absolute;left:0;right:0;bottom:0;height:30%;background:linear-gradient(180deg,#1a4636,#10291f);}
+  .intro .fence{position:absolute;left:0;right:0;bottom:calc(30% - 2px);height:64px;overflow:hidden;opacity:.9;}
+  .intro .fence i{position:absolute;inset:0;width:200%;background:
+      repeating-linear-gradient(90deg,#d9cfae 0 7px,transparent 7px 120px),
+      linear-gradient(#d9cfae,#d9cfae) 0 14px/100% 5px no-repeat,linear-gradient(#d9cfae,#d9cfae) 0 38px/100% 5px no-repeat;
+    animation:scroll 1.7s linear infinite;}
+  .intro .road{position:absolute;left:0;right:0;bottom:7%;height:15%;background:#26302b;border-top:3px solid #3b4741;}
+  .intro .road i{position:absolute;left:0;top:48%;width:200%;height:5px;background:repeating-linear-gradient(90deg,#e8d9a8 0 60px,transparent 60px 130px);animation:scroll .55s linear infinite;}
+  @keyframes scroll{to{transform:translateX(-130px)}}
+  .intro .fence i{animation-name:scrollFence;}
+  @keyframes scrollFence{to{transform:translateX(-120px)}}
+  .intro.parked .road i,.intro.parked .fence i,.intro.parked .stars{animation-play-state:paused;}
+  .van{position:absolute;bottom:calc(7% + 3%);left:50%;width:min(360px,62vw);margin-left:calc(min(360px,62vw) / -2);transform:translateX(-120vw);}
+  .intro.go .van{animation:vanIn 3.5s cubic-bezier(.16,.72,.2,1) forwards;}
+  @keyframes vanIn{0%{transform:translateX(-120vw)}100%{transform:translateX(0)}}
+  .van .bob{animation:bob .42s ease-in-out infinite alternate;}
+  .intro.parked .van .bob{animation:none;}
+  @keyframes bob{from{transform:translateY(0)}to{transform:translateY(-2.5px)}}
+  .van .wheel{transform-box:fill-box;transform-origin:center;animation:spin .5s linear infinite;}
+  .intro.parked .van .wheel{animation:none;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .van .beam{opacity:.0;transition:opacity .8s;}
+  .intro.parked .van .beam{opacity:.55;}
+  .van img{display:block;width:100%;height:auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));}
+  .intro .title{position:absolute;left:0;right:0;top:27%;text-align:center;padding:0 16px;opacity:0;transform:translateY(10px);transition:opacity 1s,transform 1s;}
+  .intro.parked .title{opacity:1;transform:none;}
+  .intro .title h2{margin:0;font-size:clamp(26px,5.4vw,52px);letter-spacing:.32em;font-weight:300;text-transform:uppercase;text-shadow:0 2px 24px rgba(0,0,0,.5);}
+  .intro .title h2 b{color:var(--gold);font-weight:700;}
+  .intro .title p{margin:12px 0 0;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-light);opacity:.85;}
+  .intro .intro-actions{position:absolute;left:0;right:0;bottom:2.2%;text-align:center;opacity:0;transition:opacity .8s .3s;}
+  .intro.parked .intro-actions{opacity:1;}
+  .intro .intro-actions button{background:var(--gold);color:var(--green-dark);border:0;padding:10px 20px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.3px;}
+  .intro .skip-hint{position:absolute;top:14px;right:18px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.45);}
+
+  /* ---------- welcome (after sign-in) ---------- */
+  .welcome{position:fixed;inset:0;z-index:310;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:radial-gradient(ellipse at 50% 55%,#12352a 0%,#08130f 62%,#030806 100%);color:#fff;text-align:center;overflow:hidden;opacity:1;transition:opacity 1.4s ease;}
+  .welcome.show{display:flex;}
+  .welcome.out{opacity:0;pointer-events:none;}
+  .welcome .fog{position:absolute;left:-30%;width:160%;height:46%;filter:blur(38px);opacity:.5;
+    background:radial-gradient(ellipse at 30% 50%,rgba(232,217,168,.26),transparent 60%),radial-gradient(ellipse at 72% 50%,rgba(120,190,160,.22),transparent 62%);animation:drift 16s ease-in-out infinite alternate;}
+  .welcome .fog.f1{top:8%;} .welcome .fog.f2{bottom:4%;animation-duration:22s;animation-direction:alternate-reverse;opacity:.4;}
+  @keyframes drift{from{transform:translateX(-7%)}to{transform:translateX(7%)}}
+  .welcome .w-small{font-size:clamp(13px,2vw,17px);letter-spacing:.7em;text-transform:uppercase;color:var(--gold-light);opacity:0;animation:wfade 2.6s .5s forwards;margin-left:.7em;}
+  .welcome .w-name{margin:.25em 0 0;font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:clamp(46px,11vw,120px);letter-spacing:.06em;line-height:1.1;}
+  .welcome .w-name span{display:inline-block;opacity:0;filter:blur(14px);transform:translateY(8px);animation:wletter 2.2s forwards;text-shadow:0 0 34px rgba(232,217,168,.55);}
+  @keyframes wletter{to{opacity:1;filter:blur(0);transform:none}}
+  @keyframes wfade{to{opacity:.9}}
+  .welcome .w-enter{margin-top:42px;background:transparent;border:1px solid rgba(232,217,168,.55);color:var(--gold-light);padding:11px 34px;letter-spacing:.4em;text-transform:uppercase;font-size:12px;border-radius:2px;cursor:pointer;opacity:0;animation:wfade 1.6s 2.6s forwards;transition:background .3s,color .3s;}
+  .welcome .w-enter:hover{background:var(--gold-light);color:#08130f;}
+  .welcome.speaking .w-enter{display:none;}
+  .welcome .w-sub{position:absolute;bottom:22px;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:rgba(255,255,255,.35);}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>SALLEE <span>LOCAL</span> DISPATCH</h1>
+  <div class="nav-group">
+    <button class="btn ghost" id="prevBtn">&larr; Prev 2 Wks</button>
+    <div class="range-label" id="rangeLabel"></div>
+    <button class="btn ghost" id="nextBtn">Next 2 Wks &rarr;</button>
+    <button class="btn ghost" id="todayBtn">This Week</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="status-note" id="authUserBadge" style="display:none;margin-right:2px;"></span>
+  <button class="btn ghost" id="signInBtn">Sign in with Microsoft</button>
+  <button class="btn ghost" id="signOutBtn" style="display:none;">Sign out</button>
+  <button class="btn" id="exportBtn">Export JSON</button>
+  <button class="btn" id="importBtn">Import Excel</button>
+  <span class="status-note" id="statusNote">Saved locally in this browser</span>
+</div>
+
+<div id="topScrollSync"><div id="topScrollSyncInner"></div></div>
+
+<div class="board-wrap">
+  <table class="board" id="boardTable">
+    <thead>
+      <tr id="regionRow"></tr>
+      <tr id="headRow"></tr>
+    </thead>
+    <tbody id="boardBody"></tbody>
+  </table>
+</div>
+
+<div class="modal-overlay" id="jobModalOverlay">
+  <div class="modal">
+    <h2 id="jobModalTitle">Add Job</h2>
+    <label>Type</label>
+    <select id="jobType">
+      <option value="normal">Normal job</option>
+      <option value="spare">Spare / standby</option>
+      <option value="vacation">Vacation / off</option>
+      <option value="note">Note only</option>
+      <option value="pm">PM</option>
+      <option value="safety_inspection">Safety Inspection</option>
+    </select>
+    <div id="technicianRow" class="modal-row" style="display:none;">
+      <div>
+        <label>Maintenance Time</label>
+        <input id="jobMaintTime" type="time">
+      </div>
+      <div>
+        <label>Assigned Technician</label>
+        <input id="jobTechnician" placeholder="e.g. John Reyes">
+      </div>
+    </div>
+    <label>Assign Driver</label>
+    <select id="jobAssignDriver"></select>
+    <div id="repeatThroughRow" class="modal-row">
+      <div>
+        <label>Start Date</label>
+        <input type="date" id="jobStartDate">
+      </div>
+      <div>
+        <label>End Date (optional &mdash; for a vacation stretch, etc.)</label>
+        <input type="date" id="jobEndDate">
+      </div>
+    </div>
+    <label>Customer / Contact</label>
+    <input id="jobCustomer" placeholder="e.g. Mike Stidham">
+    <div class="modal-row">
+      <div>
+        <label>Origin</label>
+        <input id="jobOrigin" list="placeList" placeholder="e.g. Sallee Barn, Keeneland RT" autocomplete="off">
+      </div>
+      <div>
+        <label>Origin Trainer/Farm</label>
+        <input id="jobOriginFarm" placeholder="e.g. Rusty Arnold">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div>
+        <label>Destination</label>
+        <input id="jobDestination" list="placeList" placeholder="e.g. Rood & Riddle" autocomplete="off">
+      </div>
+      <div>
+        <label>Destination Trainer/Farm</label>
+        <input id="jobDestinationFarm" placeholder="e.g. High Point Farm">
+      </div>
+    </div>
+    <label>Additional Pickups/Drops (optional &mdash; reference only, doesn't affect turnaround checks)</label>
+    <input id="jobAdditionalStops" placeholder="e.g. also picking up at MTH">
+    <div class="modal-row">
+      <div>
+        <label>In (report time)</label>
+        <input id="jobTimeIn" type="time">
+      </div>
+      <div>
+        <label>Out (time or WD)</label>
+        <input id="jobTimeOut" placeholder="3:30 PM or WD">
+      </div>
+      <div>
+        <label>Load Time</label>
+        <input id="jobTime" type="time">
+      </div>
+    </div>
+    <label>Load Type</label>
+    <select id="jobLoadType">
+      <option value="">—</option>
+      <option value="drop">Drop</option>
+      <option value="race_and_return">Race & Return</option>
+      <option value="swap">Swap</option>
+      <option value="breeding">Breeding trip</option>
+      <option value="night_breeding">Night breeding trip</option>
+      <option value="shuttle">Shuttle</option>
+      <option value="wait_return">Wait & Return</option>
+      <option value="other">Other</option>
+    </select>
+    <label>Load Board Link / Order # (optional)</label>
+    <div style="display:flex;gap:6px;">
+      <input id="jobLoadBoardRef" placeholder="Paste a link/order #, or browse ->" style="flex:1;">
+      <button type="button" class="btn-secondary" id="lbBrowseBtn" style="white-space:nowrap;">Browse</button>
+    </div>
+    <div id="lbBrowsePanel" style="display:none;border:1px solid #cfc9b8;border-radius:6px;margin-top:6px;max-height:160px;overflow-y:auto;"></div>
+    <label>Notes</label>
+    <textarea id="jobNotes" placeholder="Special instructions..."></textarea>
+    <div class="modal-actions">
+      <div class="left">
+        <button class="btn-delete" id="jobDeleteBtn" style="display:none;">Delete</button>
+        <button class="btn-secondary" id="jobPrintBtn" style="display:none;">Print Trip Sheet</button>
+      </div>
+      <div class="left">
+        <button class="btn-secondary" id="jobCancelBtn">Cancel</button>
+        <button class="btn-primary" id="jobSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="driverModalOverlay">
+  <div class="modal">
+    <h2 id="driverModalTitle">Add Driver / Team</h2>
+    <div class="modal-row">
+      <div>
+        <label>Driver 1</label>
+        <input id="drvName1" placeholder="e.g. PAUL Z.">
+      </div>
+      <div>
+        <label>Driver 2 (optional)</label>
+        <input id="drvName2" placeholder="e.g. JASEN">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div>
+        <label>Truck #</label>
+        <input id="drvTruck" placeholder="e.g. 657">
+      </div>
+      <div>
+        <label>Trailer #</label>
+        <input id="drvTrailer" placeholder="e.g. 185A+">
+      </div>
+    </div>
+    <label>Group</label>
+    <select id="drvLocation">
+      <option value="">— Unassigned —</option>
+      <option value="LOCAL">Local</option>
+      <option value="LOCAL_OTR">Local / OTR</option>
+      <option value="AGENT">Agent / Driver</option>
+      <option value="PT">Part-time</option>
+    </select>
+    <div class="modal-actions">
+      <div class="left">
+        <button class="btn-delete" id="drvDeleteBtn" style="display:none;">Remove</button>
+      </div>
+      <div class="left">
+        <button class="btn-secondary" id="drvCancelBtn">Cancel</button>
+        <button class="btn-primary" id="drvSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirmOverlay">
+  <div class="modal">
+    <h2>Please confirm</h2>
+    <p id="confirmMessage" style="font-size:13px;color:#3a362c;line-height:1.5;margin:0 0 4px;"></p>
+    <div class="modal-actions">
+      <div class="left"></div>
+      <div class="left">
+        <button class="btn-secondary" id="confirmCancelBtn">Cancel</button>
+        <button class="btn-delete" id="confirmOkBtn">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="orderDetailOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h2>Load Board Order</h2>
+    <div id="orderDetailBody" style="font-size:13px;color:#3a362c;line-height:1.6;margin:0 0 4px;"></div>
+    <div class="modal-actions">
+      <div class="left"></div>
+      <div class="left">
+        <button class="btn-secondary" id="orderDetailCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Sign-in intro: a van pulls in ===== -->
+<div class="intro" id="intro" aria-label="Welcome - signing in">
+  <div class="stars"></div><div class="moon"></div>
+  <svg class="hills" viewBox="0 0 1200 160" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 120 C150 60 300 140 480 90 S800 40 1000 100 S1150 90 1200 70 L1200 160 L0 160Z" fill="#12402f"/>
+    <path d="M0 140 C200 100 380 150 600 120 S950 90 1200 130 L1200 160 L0 160Z" fill="#164c38"/>
+  </svg>
+  <div class="ground"></div>
+  <div class="fence"><i></i></div>
+  <div class="road"><i></i></div>
+  <div class="van" id="van">
+    <!-- To use a real photo of a Sallee van instead of this drawing, set VAN_PHOTO_URL near the top of the script. -->
+    <svg id="vanSvg" viewBox="0 0 480 190" aria-hidden="true">
+      <ellipse cx="195" cy="172" rx="190" ry="9" fill="rgba(0,0,0,.35)"/>
+      <polygon class="beam" points="378,122 480,92 480,168 378,140" fill="url(#beamG)"/>
+      <defs><linearGradient id="beamG" x1="0" x2="1"><stop offset="0" stop-color="#fff6c8" stop-opacity=".9"/><stop offset="1" stop-color="#fff6c8" stop-opacity="0"/></linearGradient></defs>
+      <g class="bob">
+        <rect x="14" y="36" width="262" height="108" rx="10" fill="#f4f1e6"/>
+        <polygon points="270,58 322,58 356,98 376,104 382,128 382,144 270,144" fill="#f4f1e6"/>
+        <polygon points="282,68 316,68 342,100 282,100" fill="#a9d3dc"/>
+        <rect x="14" y="108" width="262" height="14" fill="#14523f"/>
+        <rect x="14" y="123" width="262" height="3" fill="#c8a24a"/>
+        <text x="46" y="88" font-family="Georgia,serif" font-weight="700" font-size="30" letter-spacing="6" fill="#0e3b2e">SALLEE</text>
+        <text x="48" y="101" font-family="Arial,sans-serif" font-size="9" letter-spacing="4" fill="#8a5a00">HORSE VANS</text>
+        <rect x="372" y="128" width="12" height="9" rx="2" fill="#ffe9a3"/>
+        <rect x="262" y="140" width="126" height="9" rx="3" fill="#3a4540"/>
+        <g class="wheel"><circle cx="86" cy="148" r="24" fill="#1b1f1d"/><circle cx="86" cy="148" r="12" fill="#c9c6b8"/><line x1="86" y1="136" x2="86" y2="160" stroke="#555" stroke-width="3"/><line x1="74" y1="148" x2="98" y2="148" stroke="#555" stroke-width="3"/></g>
+        <g class="wheel"><circle cx="322" cy="148" r="24" fill="#1b1f1d"/><circle cx="322" cy="148" r="12" fill="#c9c6b8"/><line x1="322" y1="136" x2="322" y2="160" stroke="#555" stroke-width="3"/><line x1="310" y1="148" x2="334" y2="148" stroke="#555" stroke-width="3"/></g>
+      </g>
+    </svg>
+  </div>
+  <div class="title"><h2>Sallee <b>Local</b> Dispatch</h2><p id="introSub">Local fleet board</p></div>
+  <div class="intro-actions"><button id="introSignInBtn">Sign in with Microsoft</button></div>
+  <div class="skip-hint">tap anywhere to continue</div>
+</div>
+
+<!-- ===== Welcome (shown once a day, after sign-in) ===== -->
+<div class="welcome" id="welcome" aria-live="polite">
+  <div class="fog f1"></div><div class="fog f2"></div>
+  <div class="w-small">Welcome</div>
+  <h1 class="w-name" id="wName"></h1>
+  <button class="w-enter" id="wEnter">Enter</button>
+  <div class="w-sub">Sallee Local Dispatch</div>
+</div>
+
+<!-- ===== Excel import ===== -->
+<div class="modal-overlay" id="xlOverlay">
+  <div class="modal" style="max-width:560px;">
+    <h2>Import Excel dispatch chart</h2>
+    <p style="font-size:12px;color:#5c5648;margin:0 0 6px;line-height:1.5;">Choose the Local KY chart (.xlsx), then pick the year's tab. One year at a time.</p>
+    <input type="file" id="xlFile" accept=".xlsx,.xlsm,.xls">
+    <div class="modal-row" style="margin-top:8px;">
+      <div><label>Tab (year)</label><select id="xlSheet" disabled></select></div>
+      <div><label>First day of this chart</label><input type="date" id="xlStart" disabled></div>
+    </div>
+    <div class="xl-box" id="xlPreview">Nothing loaded yet.</div>
+    <label class="xl-chk"><input type="checkbox" id="xlReplace" checked><span>Replace jobs already on the board for these dates (so importing the same tab twice never doubles anything).</span></label>
+    <div class="xl-prog" id="xlProgWrap"><div id="xlProg"></div></div>
+    <div id="xlStatus" style="font-size:12px;margin-top:6px;color:#3a362c;"></div>
+    <div class="modal-actions">
+      <div class="left"></div>
+      <div class="left">
+        <button class="btn-secondary" id="xlCancelBtn">Close</button>
+        <button class="btn-primary" id="xlGoBtn" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+<datalist id="placeList"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.30.0/lib/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const DEFAULT_DRIVERS = []; // drivers come from the Excel import (or the + button)
+
+const DAY_NAMES=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const LOAD_TYPE_LABELS={drop:'Drop', race_and_return:'Race & Return', swap:'Swap', breeding:'Breeding trip', night_breeding:'Night breeding trip', shuttle:'Shuttle', wait_return:'Wait & Return', other:'Other'};
+const MAINTENANCE_LABELS={pm:'PM', safety_inspection:'Safety Inspection'};
+const REGION_ORDER = ['LOCAL','LOCAL_OTR','AGENT','PT',''];
+const REGION_DISPLAY = {LOCAL:'Local', LOCAL_OTR:'Local / OTR', AGENT:'Agent / Driver', PT:'Part-time', '':'Unassigned'};
+
+const LS_DRIVERS='sallee_local_drivers_v1';
+const LS_JOBS='sallee_local_jobs_v1';
+const LS_WEEKSTART='sallee_local_weekstart_v1';
+
+let drivers = JSON.parse(localStorage.getItem(LS_DRIVERS) || 'null') || DEFAULT_DRIVERS;
+let jobs = JSON.parse(localStorage.getItem(LS_JOBS) || 'null') || [];
+let jobIdCounter = jobs.reduce((m,j)=>Math.max(m, parseInt((j.id||'j0').replace('j',''))||0), 0) + 1;
+
+function mondayOf(d){
+  const dt = new Date(d);
+  const day = dt.getDay();
+  const diff = (day===0?-6:1)-day;
+  dt.setDate(dt.getDate()+diff);
+  dt.setHours(0,0,0,0);
+  return dt;
+}
+let weekStart = new Date(localStorage.getItem(LS_WEEKSTART) || mondayOf(new Date()).toISOString());
+weekStart = mondayOf(weekStart);
+
+function saveAll(){
+  localStorage.setItem(LS_DRIVERS, JSON.stringify(drivers));
+  localStorage.setItem(LS_JOBS, JSON.stringify(jobs));
+  localStorage.setItem(LS_WEEKSTART, weekStart.toISOString());
+  if(!syncEnabled){
+    document.getElementById('statusNote').textContent = 'Saved locally ' + new Date().toLocaleTimeString();
+  }
+}
+
+function fmtDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function getDateRange(){
+  const arr=[];
+  for(let i=0;i<14;i++){
+    const d = new Date(weekStart);
+    d.setDate(d.getDate()+i);
+    arr.push(d);
+  }
+  return arr;
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function dateFromStr(s){
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function driverLabel(drv){
+  if(!drv) return '';
+  const names = [drv.name1, drv.name2].filter(Boolean).join(' / ');
+  const truckPart = [drv.truck, drv.trailer].filter(Boolean).join('/');
+  return names + (truckPart ? ' · '+truckPart : '');
+}
+function formatTimeDisplay(t){
+  if(!t) return '';
+  const parts = t.split(':');
+  let h = parseInt(parts[0], 10);
+  const m = parts[1] || '00';
+  if(isNaN(h)) return t;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if(h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+function findTimeConflict(driverId, date, time, excludeIds){
+  if(!driverId || !time) return null;
+  return jobs.find(j => j.assignedDriverId===driverId && j.date===date && j.time===time && !excludeIds.includes(j.id)) || null;
+}
+
+/* Origins/destinations on the local board are free text with autocomplete (farms, tracks, clinics...).
+   The OTR board's drive-time turnaround checks are switched off here: they only know track-to-track times. */
+function setLocationField(prefix, value){ document.getElementById('job'+prefix).value = value || ''; }
+function getLocationField(prefix){ return document.getElementById('job'+prefix).value.trim(); }
+function getTurnaroundWarning(job){ return {status:'none'}; }
+function formatMinutesDuration(mins){ if(mins < 60) return `${mins}m`; const h=Math.floor(mins/60), m=mins%60; return m?`${h}h ${m}m`:`${h}h`; }
+function absMinutesToDateTimeDisplay(absMin){ return new Date(absMin*60000).toLocaleString(); }
+
+function getSortedDrivers(){
+  const sorted = [];
+  REGION_ORDER.forEach(region=>{
+    drivers.forEach(d=>{
+      if((d.location||'')===region) sorted.push(d);
+    });
+  });
+  return sorted;
+}
+function getRegionGroups(sortedDrivers){
+  const groups = [];
+  sortedDrivers.forEach(d=>{
+    const region = d.location || '';
+    const last = groups[groups.length-1];
+    if(last && last.region===region){ last.count++; }
+    else{ groups.push({region, count:1}); }
+  });
+  return groups;
+}
+
+function render(){
+  const sortedDrivers = getSortedDrivers();
+  renderRegionRow(sortedDrivers);
+  renderHeadRow(sortedDrivers);
+  renderBoard(sortedDrivers);
+  renderRangeLabel();
+  syncScrollWidth();
+}
+
+function syncScrollWidth(){
+  const table = document.getElementById('boardTable');
+  document.getElementById('topScrollSyncInner').style.width = table.scrollWidth + 'px';
+}
+
+let syncingScroll = false;
+(function setupScrollSync(){
+  const boardWrap = document.querySelector('.board-wrap');
+  const topSync = document.getElementById('topScrollSync');
+  topSync.addEventListener('scroll', ()=>{
+    if(syncingScroll) return;
+    syncingScroll = true;
+    boardWrap.scrollLeft = topSync.scrollLeft;
+    syncingScroll = false;
+  });
+  boardWrap.addEventListener('scroll', ()=>{
+    if(syncingScroll) return;
+    syncingScroll = true;
+    topSync.scrollLeft = boardWrap.scrollLeft;
+    syncingScroll = false;
+  });
+})();
+
+function renderRangeLabel(){
+  const dates = getDateRange();
+  const opts = {month:'short', day:'numeric'};
+  document.getElementById('rangeLabel').textContent =
+    `${dates[0].toLocaleDateString('en-US',opts)} – ${dates[13].toLocaleDateString('en-US',opts)}, ${dates[13].getFullYear()}`;
+}
+
+function renderRegionRow(sortedDrivers){
+  const row = document.getElementById('regionRow');
+  row.innerHTML = '';
+  const spacer = document.createElement('th');
+  spacer.className = 'region-spacer';
+  row.appendChild(spacer);
+
+  const groups = getRegionGroups(sortedDrivers);
+  groups.forEach(g=>{
+    const th = document.createElement('th');
+    th.className = 'region-label region-' + (g.region || 'unassigned');
+    th.colSpan = g.count;
+    th.textContent = REGION_DISPLAY[g.region] || 'Unassigned';
+    row.appendChild(th);
+  });
+
+  const endSpacer = document.createElement('th');
+  endSpacer.className = 'region-end-spacer';
+  row.appendChild(endSpacer);
+}
+
+function renderHeadRow(sortedDrivers){
+  const row = document.getElementById('headRow');
+  row.innerHTML = '';
+  const corner = document.createElement('td');
+  corner.className = 'corner-cell';
+  row.appendChild(corner);
+
+  sortedDrivers.forEach(drv=>{
+    const th = document.createElement('th');
+    th.className = 'driver-head';
+    th.dataset.driverId = drv.id;
+    th.innerHTML = `
+      <div class="dname">${escapeHtml(drv.name1||'—')}</div>
+      ${drv.name2 ? `<div class="dname2">${escapeHtml(drv.name2)}</div>` : ''}
+      <div class="dtruck">${escapeHtml([drv.truck,drv.trailer].filter(Boolean).join('/'))}</div>
+    `;
+    th.addEventListener('click', ()=>openDriverModal(drv.id));
+    row.appendChild(th);
+  });
+
+  const addTh = document.createElement('th');
+  addTh.className = 'add-driver-cell';
+  addTh.innerHTML = `<button title="Add driver/team">+</button>`;
+  addTh.querySelector('button').addEventListener('click', ()=>openDriverModal(null));
+  row.appendChild(addTh);
+}
+
+function renderBoard(sortedDrivers){
+  const body = document.getElementById('boardBody');
+  body.innerHTML = '';
+  const dates = getDateRange();
+
+  dates.forEach(d=>{
+    const dateStr = fmtDate(d);
+    const dow = d.getDay();
+    const isWeekend = dow===0 || dow===6;
+    const tr = document.createElement('tr');
+    if(isWeekend) tr.className = 'row-weekend';
+
+    const dateTd = document.createElement('td');
+    dateTd.className = 'date-cell' + (isWeekend?' weekend':'');
+    dateTd.innerHTML = `<div class="dow">${DAY_NAMES[dow]}</div><div class="dnum">${d.getMonth()+1}/${d.getDate()}</div>`;
+    tr.appendChild(dateTd);
+
+    sortedDrivers.forEach(drv=>{
+      const td = document.createElement('td');
+      td.className = 'job-cell';
+      td.dataset.date = dateStr;
+      td.dataset.driverId = drv.id;
+
+      const cellJobs = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===drv.id)
+                            .sort((a,b)=>(a.order||0)-(b.order||0));
+      cellJobs.forEach(job=>td.appendChild(buildJobCard(job)));
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'add-job-btn';
+      addBtn.textContent = '+';
+      addBtn.title = 'Add job for this driver/date';
+      addBtn.addEventListener('click', ()=>openJobModal(null, dateStr, drv.id));
+      td.appendChild(addBtn);
+
+      attachDropZone(td);
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+}
+
+function buildJobCard(job){
+  const card = document.createElement('div');
+  card.className = 'job-card type-' + (job.type||'normal');
+  card.draggable = true;
+  card.dataset.jobId = job.id;
+
+  let routeHtml = '';
+  if(job.origin || job.destination){
+    routeHtml = `<div class="route">${escapeHtml(job.origin||'?')}<span class="arrow">&rarr;</span>${escapeHtml(job.destination||'?')}</div>`;
+  }
+  let metaBits = [];
+  if(job.timeIn) metaBits.push('In ' + formatTimeDisplay(job.timeIn));
+  if(job.timeOut) metaBits.push('Out ' + outDisplay(job.timeOut));
+  if(job.time) metaBits.push('Load ' + formatTimeDisplay(job.time));
+  const farmBits = [job.originFarm, job.destinationFarm].filter(Boolean).join(' → ');
+  if(farmBits) metaBits.push(farmBits);
+  const metaHtml = metaBits.length ? `<div class="meta">${escapeHtml(metaBits.join(' · '))}</div>` : '';
+  const additionalStopsHtml = job.additionalStops ? `<div class="meta" style="font-style:italic;" title="${escapeHtml(job.additionalStops)}">+ ${escapeHtml(job.additionalStops)}</div>` : '';
+  const horseHtml = job.loadType ? `<div class="horse">${escapeHtml(LOAD_TYPE_LABELS[job.loadType]||job.loadType)}</div>` : '';
+  const notesHtml = job.notes ? `<div class="notes" title="${escapeHtml(job.notes)}">${escapeHtml(job.notes)}</div>` : '';
+
+  let lbRefHtml = '';
+  if(job.loadBoardRef){
+    const isUrl = /^https?:\/\//i.test(job.loadBoardRef.trim());
+    const linkedOrderId = parseLinkedOrderId(job.loadBoardRef);
+    if(isUrl){
+      lbRefHtml = `<a class="lb-ref" href="${escapeHtml(job.loadBoardRef.trim())}" target="_blank" rel="noopener" title="Open in Load Board">&#128279; Load Board</a>`;
+    } else if(linkedOrderId){
+      lbRefHtml = `<span class="lb-ref" data-order-id="${escapeHtml(linkedOrderId)}" title="View order details">&#128279; ${escapeHtml(job.loadBoardRef)}</span>`;
+    } else {
+      lbRefHtml = `<span class="lb-ref" title="Load Board reference">&#128279; ${escapeHtml(job.loadBoardRef)}</span>`;
+    }
+  }
+
+  let body = '';
+  if(job.type === 'pm' || job.type === 'safety_inspection'){
+    const label = MAINTENANCE_LABELS[job.type] || job.type;
+    const bits = [];
+    if(job.maintTime) bits.push(formatTimeDisplay(job.maintTime));
+    if(job.technician) bits.push('Tech: ' + job.technician);
+    body += `<div class="maint-banner">${escapeHtml(label)}</div>`;
+    if(bits.length) body += `<div class="maint-detail">${escapeHtml(bits.join(' · '))}</div>`;
+  }
+  const custHtml = job.customer ? `<div class="cust">${escapeHtml(job.customer)}</div>` : '';
+  body += custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
+  if(!body){ body = `<div class="meta">(click to edit)</div>`; }
+  card.innerHTML = body;
+
+  card.addEventListener('click', (e)=>{
+    const orderBadge = e.target.closest('.lb-ref[data-order-id]');
+    if(orderBadge){ showOrderDetail(orderBadge.dataset.orderId); return; }
+    if(e.target.closest('.lb-ref')) return;
+    if(e.target.closest('.turnaround-warning')) return;
+    openJobModal(job.id);
+  });
+  card.addEventListener('dragstart', (e)=>{
+    e.dataTransfer.setData('application/x-job', job.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(()=>card.classList.add('dragging'), 0);
+  });
+  card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+
+  const warning = getTurnaroundWarning(job);
+  if(warning.status === 'ok'){
+    card.classList.add('turnaround-ok');
+  } else if(warning.status === 'unverifiable'){
+    const warnEl = document.createElement('div');
+    warnEl.className = 'turnaround-warning unverifiable';
+    warnEl.textContent = `? Can't verify turnaround (tap for why)`;
+    warnEl.title = warning.reason;
+    warnEl.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      showToast(warning.reason);
+    });
+    card.appendChild(warnEl);
+  } else if(warning.status === 'not_possible'){
+    card.classList.add('turnaround-not-possible');
+    const warnEl = document.createElement('div');
+    warnEl.className = 'turnaround-warning not-possible';
+    warnEl.textContent = `\u26D4 Not possible \u2014 ${formatMinutesDuration(warning.shortByMinutes)} short`;
+    warnEl.title = `Based on real drive-time data, this truck can't realistically be ready until about ${absMinutesToDateTimeDisplay(warning.earliestReadyAbs)} \u2014 more than 4 hours beyond this load's start time. Not doable as scheduled.`;
+    card.appendChild(warnEl);
+  } else if(warning.status === 'tight'){
+    card.classList.add('turnaround-tight');
+    const warnEl = document.createElement('div');
+    warnEl.className = 'turnaround-warning';
+    warnEl.textContent = `\u23F1 Tight turnaround \u2014 ${formatMinutesDuration(warning.shortByMinutes)} short`;
+    warnEl.title = `Based on real drive-time data, this truck isn't ready until about ${absMinutesToDateTimeDisplay(warning.earliestReadyAbs)}. Doable, but could run late.`;
+    card.appendChild(warnEl);
+  }
+  // status 'none' - nothing to check against yet (no prior job that day) - stays neutral, no outline
+
+  return card;
+}
+
+function attachDropZone(td){
+  td.addEventListener('dragover', (e)=>{
+    if(e.dataTransfer.types.includes('application/x-job')){
+      e.preventDefault();
+      td.classList.add('dragover');
+    }
+  });
+  td.addEventListener('dragleave', ()=>td.classList.remove('dragover'));
+  td.addEventListener('drop', (e)=>{
+    td.classList.remove('dragover');
+    const jobId = e.dataTransfer.getData('application/x-job');
+    if(!jobId) return;
+    e.preventDefault();
+    const job = jobs.find(j=>j.id===jobId);
+    if(!job) return;
+
+    const targetDate = td.dataset.date;
+    const targetDriverId = td.dataset.driverId;
+
+    const conflict = findTimeConflict(targetDriverId, targetDate, job.time, [job.id]);
+    if(conflict){
+      const drv = drivers.find(d=>d.id===targetDriverId);
+      showToast(`${drv ? driverLabel(drv) : 'This driver/team'} is already assigned to a trip at ${formatTimeDisplay(job.time)} on this date (${conflict.origin||'?'} \u2192 ${conflict.destination||'?'}). Pick a different time or driver.`);
+      return;
+    }
+
+    job.date = targetDate;
+    job.assignedDriverId = targetDriverId;
+    const siblingMax = jobs.filter(j=>j.date===targetDate && j.assignedDriverId===targetDriverId && j.id!==job.id)
+                            .reduce((m,j)=>Math.max(m, j.order||0), 0);
+    job.order = siblingMax + 1;
+    saveAll();
+    render();
+    syncJobsUpsert([job]);
+  });
+}
+
+function showToast(message, kind){
+  const existing = document.getElementById('appToast');
+  if(existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'appToast';
+  el.className = 'toast' + (kind==='ok' ? ' ok' : '');
+  el.innerHTML = `<span>${escapeHtml(message)}</span><span class="toast-close">&times;</span>`;
+  el.querySelector('.toast-close').addEventListener('click', ()=>el.remove());
+  document.body.appendChild(el);
+  setTimeout(()=>{ if(document.getElementById('appToast')===el) el.remove(); }, 6000);
+}
+
+let confirmCallback = null;
+function showConfirm(message, onConfirm){
+  document.getElementById('confirmMessage').textContent = message;
+  confirmCallback = onConfirm;
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+document.getElementById('confirmCancelBtn').addEventListener('click', ()=>{
+  document.getElementById('confirmOverlay').classList.remove('open');
+  confirmCallback = null;
+});
+document.getElementById('confirmOkBtn').addEventListener('click', ()=>{
+  document.getElementById('confirmOverlay').classList.remove('open');
+  if(confirmCallback) confirmCallback();
+  confirmCallback = null;
+});
+document.getElementById('confirmOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='confirmOverlay'){
+    document.getElementById('confirmOverlay').classList.remove('open');
+    confirmCallback = null;
+  }
+});
+
+const LOAD_BOARD_ORDERS_URL = 'https://canumanu.github.io/SALLEE-LOAD-BOARD/data/orders.json';
+let loadBoardOrdersCache = null;
+async function fetchLoadBoardOrders(){
+  if(loadBoardOrdersCache) return loadBoardOrdersCache;
+  const res = await fetch(LOAD_BOARD_ORDERS_URL, {cache:'no-store'});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  loadBoardOrdersCache = Array.isArray(data) ? data : (data.orders || data.Orders || []);
+  return loadBoardOrdersCache;
+}
+function pickField(obj, candidates){
+  for(const key of candidates){
+    if(obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
+  }
+  return '';
+}
+function describeOrder(order){
+  const origin = pickField(order, ['origin','Origin','ORIGIN']);
+  const destination = pickField(order, ['destination','Destination','DESTINATION']);
+  const originFarm = pickField(order, ['originFarm','OriginFarm','ORIGIN FARM','origin_farm']);
+  const destinationFarm = pickField(order, ['destinationFarm','DestinationFarm','DESTINATION FARM','destination_farm']);
+  const date = pickField(order, ['date','Date','tripDate','TripDate','pickupDate','PickupDate']);
+  const id = pickField(order, ['id','Id','ID','orderId','OrderID','orderNumber']);
+  let horses = pickField(order, ['horses','Horses']);
+  let horseLabel = '';
+  if(Array.isArray(horses)) horseLabel = horses.map(h=>(h && (h.name||h.Name))||'').filter(Boolean).join(', ');
+  else if(typeof horses === 'string') horseLabel = horses;
+  if(!horseLabel) horseLabel = pickField(order, ['HORSE NAME(S)','horseNames','HorseNames']);
+  const label = `${origin||'?'} \u2192 ${destination||'?'}${date? ' · '+date:''}${horseLabel? ' · '+horseLabel:''}`;
+  return {id, date, origin, destination, originFarm, destinationFarm, horseLabel, label};
+}
+
+// Pulls the order id back out of a loadBoardRef string that was set by the
+// Browse picker (format: "Order <id>: <label>"). Manually-typed refs (a
+// pasted link, or free text) won't match, and are left as plain non-clickable
+// text on the job card - only Browse-linked orders get the clickable badge.
+function parseLinkedOrderId(ref){
+  if(!ref) return null;
+  const m = /^Order\s+([^:]+):/.exec(ref.trim());
+  return m ? m[1].trim() : null;
+}
+
+async function showOrderDetail(orderId){
+  const body = document.getElementById('orderDetailBody');
+  body.innerHTML = 'Loading order…';
+  document.getElementById('orderDetailOverlay').classList.add('open');
+  try{
+    const orders = await fetchLoadBoardOrders();
+    const match = orders.find(o => String(pickField(o, ['id','Id','ID','orderId','OrderID','orderNumber'])) === String(orderId));
+    if(!match){
+      body.innerHTML = `This order (#${escapeHtml(orderId)}) wasn't found in the Load Board's current data — it may have been completed, canceled, or removed there.`;
+      return;
+    }
+    const d = describeOrder(match);
+    const rows = [
+      ['Route', `${d.origin||'?'} \u2192 ${d.destination||'?'}`],
+      ['Origin farm', d.originFarm],
+      ['Destination farm', d.destinationFarm],
+      ['Date', d.date],
+      ['Horses', d.horseLabel],
+    ].filter(([,v]) => v);
+    body.innerHTML = rows.map(([k,v]) => `<div><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}</div>`).join('') || 'No further details available for this order.';
+  }catch(err){
+    body.innerHTML = `Couldn't reach the Load Board data (${escapeHtml(err.message)}).`;
+  }
+}
+document.getElementById('orderDetailCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('orderDetailOverlay').classList.remove('open');
+});
+document.getElementById('orderDetailOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='orderDetailOverlay'){
+    document.getElementById('orderDetailOverlay').classList.remove('open');
+  }
+});
+
+// Builds a clean, printable one-page trip sheet for a single job - combines
+// the dispatch job's own fields with the linked Load Board order's data
+// (horses, in particular) when the job has one. Opens a separate print-only
+// window rather than printing the whole app page.
+async function printTripSheet(jobId){
+  const job = jobs.find(j=>j.id===jobId);
+  if(!job) return;
+  const drv = drivers.find(d=>d.id===job.assignedDriverId);
+
+  // Open the window synchronously (before any await) so browsers don't
+  // treat it as an unrequested popup - fill it in once everything's ready.
+  const win = window.open('', '_blank', 'width=800,height=900');
+  if(!win){
+    showToast("Your browser blocked the print window's popup. Allow popups for this site and try again.");
+    return;
+  }
+  win.document.write('<p style="font-family:sans-serif;padding:20px;">Preparing trip sheet…</p>');
+
+  let orderHtml = '';
+  const linkedOrderId = parseLinkedOrderId(job.loadBoardRef);
+  if(linkedOrderId){
+    try{
+      const orders = await fetchLoadBoardOrders();
+      const match = orders.find(o => String(pickField(o, ['id','Id','ID','orderId','OrderID','orderNumber'])) === String(linkedOrderId));
+      if(match){
+        const d = describeOrder(match);
+        if(d.horseLabel) orderHtml += `<div class="field"><span class="label">Horses:</span> ${escapeHtml(d.horseLabel)}</div>`;
+        orderHtml += `<div class="field"><span class="label">Load Board Order:</span> #${escapeHtml(String(linkedOrderId))}</div>`;
+      }
+    }catch(e){ /* offline or unreachable - print without the order extras */ }
+  } else if(job.loadBoardRef){
+    orderHtml += `<div class="field"><span class="label">Load Board Ref:</span> ${escapeHtml(job.loadBoardRef)}</div>`;
+  }
+
+  const dateLabel = job.date
+    ? dateFromStr(job.date).toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'})
+    : '';
+  const routeLabel = `${job.origin||'?'} \u2192 ${job.destination||'?'}`;
+  const farmLine = [job.originFarm, job.destinationFarm].filter(Boolean).join(' \u2192 ');
+
+  let bodyFields = '';
+  bodyFields += `<div class="field"><span class="label">Driver / Team:</span> ${escapeHtml(drv ? [drv.name1, drv.name2].filter(Boolean).join(' / ') : 'Unassigned')}</div>`;
+  if(drv && (drv.truck||drv.trailer)) bodyFields += `<div class="field"><span class="label">Truck / Trailer:</span> ${escapeHtml([drv.truck, drv.trailer].filter(Boolean).join(' / '))}</div>`;
+  bodyFields += `<div class="field"><span class="label">Date:</span> ${escapeHtml(dateLabel)}</div>`;
+  if(job.timeIn) bodyFields += `<div class="field"><span class="label">In:</span> ${escapeHtml(formatTimeDisplay(job.timeIn))}</div>`;
+  if(job.timeOut) bodyFields += `<div class="field"><span class="label">Out:</span> ${escapeHtml(outDisplay(job.timeOut))}</div>`;
+  if(job.time) bodyFields += `<div class="field"><span class="label">Load Time:</span> ${escapeHtml(formatTimeDisplay(job.time))}</div>`;
+  if(job.type==='pm' || job.type==='safety_inspection'){
+    bodyFields += `<div class="field"><span class="label">Type:</span> ${escapeHtml(MAINTENANCE_LABELS[job.type]||job.type)}</div>`;
+    if(job.maintTime) bodyFields += `<div class="field"><span class="label">Maintenance Time:</span> ${escapeHtml(formatTimeDisplay(job.maintTime))}</div>`;
+    if(job.technician) bodyFields += `<div class="field"><span class="label">Technician:</span> ${escapeHtml(job.technician)}</div>`;
+  } else {
+    bodyFields += `<div class="field"><span class="label">Route:</span> ${escapeHtml(routeLabel)}</div>`;
+    if(farmLine) bodyFields += `<div class="field"><span class="label">Farms:</span> ${escapeHtml(farmLine)}</div>`;
+    if(job.additionalStops) bodyFields += `<div class="field"><span class="label">Additional Stops:</span> ${escapeHtml(job.additionalStops)}</div>`;
+    if(job.loadType) bodyFields += `<div class="field"><span class="label">Load Type:</span> ${escapeHtml(LOAD_TYPE_LABELS[job.loadType]||job.loadType)}</div>`;
+  }
+  bodyFields += orderHtml;
+  if(job.notes) bodyFields += `<div class="field notes"><span class="label">Notes:</span> ${escapeHtml(job.notes)}</div>`;
+
+  const html = `<!DOCTYPE html><html><head><title>Trip Sheet - ${escapeHtml(dateLabel)}</title><style>
+    body{font-family:Georgia,'Times New Roman',serif;color:#2a2718;max-width:640px;margin:32px auto;padding:0 16px;}
+    h1{font-size:20px;margin:0 0 2px;}
+    .subhead{font-size:13px;color:#6b6550;margin:0 0 20px;border-bottom:2px solid #2a2718;padding-bottom:12px;}
+    .field{font-size:14px;margin:10px 0;line-height:1.4;}
+    .label{font-weight:700;display:inline-block;min-width:150px;}
+    .notes{margin-top:18px;padding-top:12px;border-top:1px solid #cfc9b8;}
+    .printBtn{margin-top:28px;}
+    @media print{ .printBtn{display:none;} }
+  </style></head><body>
+    <h1>Sallee Horse Vans</h1>
+    <div class="subhead">Trip Sheet</div>
+    ${bodyFields}
+    <div class="printBtn"><button onclick="window.print()" style="font-size:14px;padding:8px 16px;">Print</button></div>
+  </body></html>`;
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+}
+
+
+let editingJobId = null;
+let pendingDate = null;
+let pendingDriverId = null;
+
+function populateDriverSelect(selectedId){
+  const sel = document.getElementById('jobAssignDriver');
+  sel.innerHTML = '<option value="">— Unassigned —</option>' +
+    getSortedDrivers().map(d=>`<option value="${d.id}">${escapeHtml(driverLabel(d))}${d.location? ' ['+d.location+']':''}</option>`).join('');
+  sel.value = selectedId || '';
+}
+
+function openJobModal(jobId, date, driverId){
+  editingJobId = jobId;
+  refreshPlaceList();
+  const overlay = document.getElementById('jobModalOverlay');
+  const title = document.getElementById('jobModalTitle');
+  const delBtn = document.getElementById('jobDeleteBtn');
+
+  if(jobId){
+    const job = jobs.find(j=>j.id===jobId);
+    title.textContent = 'Edit Job';
+    document.getElementById('jobType').value = job.type||'normal';
+    document.getElementById('jobMaintTime').value = job.maintTime||'';
+    document.getElementById('jobTechnician').value = job.technician||'';
+    updateTechnicianRowVisibility();
+    populateDriverSelect(job.assignedDriverId);
+    document.getElementById('jobCustomer').value = job.customer||'';
+    setLocationField('Origin', job.origin);
+    document.getElementById('jobOriginFarm').value = job.originFarm||'';
+    setLocationField('Destination', job.destination);
+    document.getElementById('jobDestinationFarm').value = job.destinationFarm||'';
+    document.getElementById('jobAdditionalStops').value = job.additionalStops||'';
+    document.getElementById('jobTimeIn').value = job.timeIn||'';
+    document.getElementById('jobTimeOut').value = outDisplay(job.timeOut)||'';
+    document.getElementById('jobTime').value = job.time||'';
+    document.getElementById('jobLoadType').value = job.loadType||'';
+    document.getElementById('jobLoadBoardRef').value = job.loadBoardRef||'';
+    document.getElementById('jobNotes').value = job.notes||'';
+    delBtn.style.display='inline-block';
+    document.getElementById('jobPrintBtn').style.display='inline-block';
+    pendingDate = job.date;
+    pendingDriverId = job.assignedDriverId;
+    document.getElementById('repeatThroughRow').style.display = 'none';
+  } else {
+    title.textContent = 'Add Job';
+    document.getElementById('jobType').value='normal';
+    document.getElementById('jobMaintTime').value='';
+    document.getElementById('jobTechnician').value='';
+    updateTechnicianRowVisibility();
+    populateDriverSelect(driverId);
+    document.getElementById('jobCustomer').value='';
+    setLocationField('Origin', '');
+    document.getElementById('jobOriginFarm').value='';
+    setLocationField('Destination', '');
+    document.getElementById('jobDestinationFarm').value='';
+    document.getElementById('jobAdditionalStops').value='';
+    document.getElementById('jobTimeIn').value='';
+    document.getElementById('jobTimeOut').value='';
+    document.getElementById('jobTime').value='';
+    document.getElementById('jobLoadType').value='';
+    document.getElementById('jobLoadBoardRef').value='';
+    document.getElementById('jobNotes').value='';
+    delBtn.style.display='none';
+    document.getElementById('jobPrintBtn').style.display='none';
+    pendingDate = date;
+    pendingDriverId = driverId;
+    document.getElementById('repeatThroughRow').style.display = '';
+    document.getElementById('jobStartDate').value = date;
+    document.getElementById('jobEndDate').value = '';
+    document.getElementById('jobEndDate').min = date;
+  }
+  document.getElementById('lbBrowsePanel').style.display='none';
+  document.getElementById('lbBrowsePanel').innerHTML='';
+  overlay.classList.add('open');
+}
+
+function closeJobModal(){
+  document.getElementById('jobModalOverlay').classList.remove('open');
+  document.getElementById('lbBrowsePanel').style.display = 'none';
+  document.getElementById('lbBrowsePanel').innerHTML = '';
+  editingJobId = null;
+}
+
+document.getElementById('lbBrowseBtn').addEventListener('click', async ()=>{
+  const panel = document.getElementById('lbBrowsePanel');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="padding:8px;font-size:12px;color:#8a8368;">Loading from Load Board…</div>';
+  try{
+    const orders = await fetchLoadBoardOrders();
+    const jobDateVal = editingJobId
+      ? ((jobs.find(j=>j.id===editingJobId)||{}).date)
+      : (document.getElementById('jobStartDate').value || pendingDate);
+    const described = orders.map(describeOrder);
+    const filtered = jobDateVal ? described.filter(o=>o.date===jobDateVal) : described;
+    const toShow = filtered.length ? filtered : described;
+    if(!toShow.length){
+      panel.innerHTML = '<div style="padding:8px;font-size:12px;color:#8a8368;">No orders found in the Load Board data.</div>';
+      return;
+    }
+    panel.innerHTML = '';
+    if(!filtered.length){
+      const note = document.createElement('div');
+      note.style.cssText='padding:6px 10px;font-size:11px;color:#a49c80;';
+      note.textContent = `No exact match for ${jobDateVal||'this date'} — showing everything:`;
+      panel.appendChild(note);
+    }
+    toShow.slice(0,50).forEach(o=>{
+      const row = document.createElement('div');
+      row.style.cssText='padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #eee6d0;';
+      row.textContent = o.label;
+      row.addEventListener('mouseenter', ()=>row.style.background='#f7f1de');
+      row.addEventListener('mouseleave', ()=>row.style.background='');
+      row.addEventListener('click', ()=>{
+        document.getElementById('jobLoadBoardRef').value = o.id ? `Order ${o.id}: ${o.label}` : o.label;
+        // Autofill the rest of the job from the matched Load Board order -
+        // one-time copy at selection time, same as if the dispatcher had
+        // typed these in by hand. No ongoing tie to the order after this.
+        if(o.origin) setLocationField('Origin', o.origin);
+        if(o.destination) setLocationField('Destination', o.destination);
+        if(o.originFarm) document.getElementById('jobOriginFarm').value = o.originFarm;
+        if(o.destinationFarm) document.getElementById('jobDestinationFarm').value = o.destinationFarm;
+        if(o.horseLabel){
+          const notesEl = document.getElementById('jobNotes');
+          if(!notesEl.value.trim()) notesEl.value = `Horses: ${o.horseLabel}`;
+        }
+        panel.style.display='none';
+        panel.innerHTML='';
+      });
+      panel.appendChild(row);
+    });
+  }catch(err){
+    panel.innerHTML = `<div style="padding:8px;font-size:12px;color:var(--danger);">Could not reach the Load Board data (${err.message}). You can still paste a link or order # manually above.</div>`;
+  }
+});
+
+document.getElementById('jobType').addEventListener('change', updateTechnicianRowVisibility);
+function updateTechnicianRowVisibility(){
+  const t = document.getElementById('jobType').value;
+  document.getElementById('technicianRow').style.display = (t==='pm' || t==='safety_inspection') ? '' : 'none';
+}
+
+document.getElementById('jobCancelBtn').addEventListener('click', closeJobModal);
+document.getElementById('jobStartDate').addEventListener('change', ()=>{
+  const startVal = document.getElementById('jobStartDate').value;
+  document.getElementById('jobEndDate').min = startVal;
+  if(document.getElementById('jobEndDate').value && document.getElementById('jobEndDate').value < startVal){
+    document.getElementById('jobEndDate').value = '';
+  }
+});
+document.getElementById('jobModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='jobModalOverlay') closeJobModal();
+});
+
+document.getElementById('jobSaveBtn').addEventListener('click', ()=>{
+  const data = {
+    type: document.getElementById('jobType').value,
+    maintTime: document.getElementById('jobMaintTime').value,
+    technician: document.getElementById('jobTechnician').value.trim(),
+    customer: document.getElementById('jobCustomer').value.trim(),
+    origin: getLocationField('Origin'),
+    originFarm: document.getElementById('jobOriginFarm').value.trim(),
+    destination: getLocationField('Destination'),
+    destinationFarm: document.getElementById('jobDestinationFarm').value.trim(),
+    additionalStops: document.getElementById('jobAdditionalStops').value.trim(),
+    timeIn: document.getElementById('jobTimeIn').value,
+    timeOut: normalizeOutTime(document.getElementById('jobTimeOut').value),
+    time: document.getElementById('jobTime').value,
+    loadType: document.getElementById('jobLoadType').value,
+    loadBoardRef: document.getElementById('jobLoadBoardRef').value.trim(),
+    notes: document.getElementById('jobNotes').value.trim(),
+  };
+  const selectedDriverId = document.getElementById('jobAssignDriver').value || null;
+  let savedJobs = [];
+
+  if(editingJobId){
+    const job = jobs.find(j=>j.id===editingJobId);
+    if(selectedDriverId){
+      const conflict = findTimeConflict(selectedDriverId, job.date, data.time, [job.id]);
+      if(conflict){
+        const drv = drivers.find(d=>d.id===selectedDriverId);
+        showToast(`${drv ? driverLabel(drv) : 'This driver/team'} is already assigned to a trip at ${formatTimeDisplay(data.time)} on ${job.date} (${conflict.origin||'?'} \u2192 ${conflict.destination||'?'}). Pick a different time or driver.`);
+        return;
+      }
+    }
+    Object.assign(job, data);
+    job.assignedDriverId = selectedDriverId;
+    savedJobs = [job];
+  } else {
+    const startDate = document.getElementById('jobStartDate').value || pendingDate;
+    const endDate = document.getElementById('jobEndDate').value;
+    const datesToCreate = [];
+    if(endDate && endDate > startDate){
+      let cursor = dateFromStr(startDate);
+      const endD = dateFromStr(endDate);
+      let guard = 0;
+      while(cursor <= endD && guard < 60){
+        datesToCreate.push(fmtDate(cursor));
+        cursor.setDate(cursor.getDate()+1);
+        guard++;
+      }
+    } else {
+      datesToCreate.push(startDate);
+    }
+
+    if(selectedDriverId){
+      for(const dStr of datesToCreate){
+        const conflict = findTimeConflict(selectedDriverId, dStr, data.time, []);
+        if(conflict){
+          const drv = drivers.find(d=>d.id===selectedDriverId);
+          showToast(`${drv ? driverLabel(drv) : 'This driver/team'} is already assigned to a trip at ${formatTimeDisplay(data.time)} on ${dStr} (${conflict.origin||'?'} \u2192 ${conflict.destination||'?'}). Nothing was created \u2014 pick a different time or driver.`);
+          return;
+        }
+      }
+    }
+
+    datesToCreate.forEach(dStr=>{
+      const maxOrder = jobs.filter(j=>j.date===dStr && j.assignedDriverId===selectedDriverId).reduce((m,j)=>Math.max(m,j.order||0),0);
+      const newJob = {id:'j'+(jobIdCounter++), date:dStr, assignedDriverId:selectedDriverId, order:maxOrder+1, ...data};
+      jobs.push(newJob);
+      savedJobs.push(newJob);
+    });
+  }
+  saveAll();
+  closeJobModal();
+  render();
+  syncJobsUpsert(savedJobs);
+});
+
+document.getElementById('jobDeleteBtn').addEventListener('click', ()=>{
+  const deletedJob = jobs.find(j=>j.id===editingJobId);
+  jobs = jobs.filter(j=>j.id!==editingJobId);
+  saveAll();
+  closeJobModal();
+  render();
+  if(deletedJob) syncJobDelete(deletedJob);
+});
+document.getElementById('jobPrintBtn').addEventListener('click', ()=>{
+  if(editingJobId) printTripSheet(editingJobId);
+});
+
+let editingDriverId = null;
+
+function openDriverModal(driverId){
+  editingDriverId = driverId;
+  const overlay = document.getElementById('driverModalOverlay');
+  const title = document.getElementById('driverModalTitle');
+  const delBtn = document.getElementById('drvDeleteBtn');
+
+  if(driverId){
+    const drv = drivers.find(d=>d.id===driverId);
+    title.textContent = 'Edit Driver / Team';
+    document.getElementById('drvName1').value = drv.name1||'';
+    document.getElementById('drvName2').value = drv.name2||'';
+    document.getElementById('drvTruck').value = drv.truck||'';
+    document.getElementById('drvTrailer').value = drv.trailer||'';
+    document.getElementById('drvLocation').value = drv.location||'';
+    delBtn.style.display='inline-block';
+  } else {
+    title.textContent = 'Add Driver / Team';
+    document.getElementById('drvName1').value='';
+    document.getElementById('drvName2').value='';
+    document.getElementById('drvTruck').value='';
+    document.getElementById('drvTrailer').value='';
+    document.getElementById('drvLocation').value='';
+    delBtn.style.display='none';
+  }
+  overlay.classList.add('open');
+}
+
+function closeDriverModal(){
+  document.getElementById('driverModalOverlay').classList.remove('open');
+  editingDriverId = null;
+}
+
+document.getElementById('drvCancelBtn').addEventListener('click', closeDriverModal);
+document.getElementById('driverModalOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='driverModalOverlay') closeDriverModal();
+});
+
+document.getElementById('drvSaveBtn').addEventListener('click', ()=>{
+  const data = {
+    name1: document.getElementById('drvName1').value.trim(),
+    name2: document.getElementById('drvName2').value.trim(),
+    truck: document.getElementById('drvTruck').value.trim(),
+    trailer: document.getElementById('drvTrailer').value.trim(),
+    location: document.getElementById('drvLocation').value,
+  };
+  let savedDriver;
+  if(editingDriverId){
+    const drv = drivers.find(d=>d.id===editingDriverId);
+    Object.assign(drv, data);
+    savedDriver = drv;
+  } else {
+    savedDriver = {id:'d'+Date.now(), ...data};
+    drivers.push(savedDriver);
+  }
+  saveAll();
+  closeDriverModal();
+  render();
+  syncDriverUpsert(savedDriver);
+});
+
+document.getElementById('drvDeleteBtn').addEventListener('click', ()=>{
+  showConfirm('Remove this driver/team? Any jobs currently assigned to them will become unassigned.', ()=>{
+    const removedDriver = drivers.find(d=>d.id===editingDriverId);
+    const affectedJobs = jobs.filter(j=>j.assignedDriverId===editingDriverId);
+    affectedJobs.forEach(j=>{ j.assignedDriverId=null; });
+    drivers = drivers.filter(d=>d.id!==editingDriverId);
+    saveAll();
+    closeDriverModal();
+    render();
+    if(removedDriver) syncDriverDelete(removedDriver);
+    syncJobsUpsert(affectedJobs);
+  });
+});
+
+document.getElementById('prevBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()-14); saveAll(); render(); });
+document.getElementById('nextBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()+14); saveAll(); render(); });
+document.getElementById('todayBtn').addEventListener('click', ()=>{ weekStart = mondayOf(new Date()); saveAll(); render(); });
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const data = {drivers, jobs, weekStart: weekStart.toISOString()};
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sallee-local-dispatch-board-' + fmtDate(new Date()) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+render();
+refreshPlaceList();
+
+/* ============================================================
+   MICROSOFT 365 SIGN-IN + SHAREPOINT SYNC
+   ------------------------------------------------------------
+   Multi-user backing store. Local browser storage above remains
+   a fast cache / offline fallback - the board always renders from
+   `drivers`/`jobs` regardless of sign-in state. Once signed in,
+   those two arrays get replaced by what's on SharePoint, and every
+   add/edit/delete/drag-drop also pushes to SharePoint. Two
+   permission tiers (view vs. edit) are enforced by SharePoint's own
+   Visitor/Member site roles, not by this app - a write that comes
+   back 403 flips the app into view-only mode.
+
+   NOTE: Import JSON stays local-only (does not push to SharePoint)
+   to avoid an accidental bulk overwrite of the shared board from a
+   backup file. Use it for restoring a personal backup, not for
+   pushing changes to the team.
+   ============================================================ */
+
+const MSAL_CONFIG = {
+  auth: {
+    clientId: "3530a45a-659e-4d10-95fd-6f32b857e702",
+    authority: "https://login.microsoftonline.com/428e82a0-5a1b-41e6-a24c-ca8ea70db05a",
+    redirectUri: "https://canumanu.github.io/SALLEE-LOCAL-DISPATCH-BOARD/",
+    postLogoutRedirectUri: "https://canumanu.github.io/SALLEE-LOCAL-DISPATCH-BOARD/",
+  },
+  cache: {
+    cacheLocation: "sessionStorage",
+    storeAuthStateInCookie: false,
+  }
+};
+const GRAPH_SCOPES = ["Sites.ReadWrite.All"];
+const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const SHAREPOINT_HOSTNAME = "salleehorsevans.sharepoint.com";
+const SHAREPOINT_SITE_PATH = "/sites/SALLEEDISPATCHBOARD";
+// Points at the "Drivers" / "Jobs" lists that already exist on the site
+// (set up before this integration was wired in) rather than creating new
+// ones - list/column creation via Graph is blocked on this tenant, and
+// these lists already carry the right shape of data.
+const DRIVERS_LIST_NAME = "Local Drivers";
+const JOBS_LIST_NAME = "Local Jobs";
+// Column definitions below are used only as a fallback if a list is ever
+// missing entirely (e.g. a fresh site) - matches the real column names
+// found on the existing "Drivers"/"Jobs" lists. No separate LocalId field:
+// SharePoint's own item id is the identity, and Jobs.DriverId stores the
+// linked driver's item id directly.
+const DRIVERS_COLUMNS = [
+  {name:'Name2', text:{}},
+  {name:'Truck', text:{}},
+  {name:'Trailer', text:{}},
+  {name:'Location', text:{}}
+];
+const JOBS_COLUMNS = [
+  {name:'JobDate', text:{}},
+  {name:'DriverId', text:{}},
+  {name:'SortOrder', number:{decimalPlaces:'none'}},
+  {name:'JobType', text:{}},
+  {name:'MainTime', text:{}},
+  {name:'Technician', text:{}},
+  {name:'Customer', text:{}},
+  {name:'Origin', text:{}},
+  {name:'OriginFarm', text:{}},
+  {name:'Destination', text:{}},
+  {name:'DestinationFarm', text:{}},
+  {name:'AdditionalStops', text:{}},
+  {name:'TimeIn', text:{}},
+  {name:'TimeOut', text:{}},
+  {name:'LoadTime', text:{}},
+  {name:'LoadType', text:{}},
+  {name:'LoadboardRef', text:{}},
+  {name:'Notes', text:{allowMultipleLines:true}}
+];
+
+let msalInstance = null;
+let currentAccount = null;
+let syncEnabled = false;
+let isViewOnly = false;
+let siteId = null;
+let driversListId = null;
+let jobsListId = null;
+let pollTimer = null;
+
+function updateSyncStatus(text, isError){
+  const el = document.getElementById('statusNote');
+  el.textContent = text;
+  el.style.color = isError ? '#ffb4a8' : '';
+}
+
+function updateAuthUI(signedIn){
+  const signInBtn = document.getElementById('signInBtn');
+  const signOutBtn = document.getElementById('signOutBtn');
+  const badge = document.getElementById('authUserBadge');
+  if(signedIn && currentAccount){
+    signInBtn.style.display = 'none';
+    signOutBtn.style.display = '';
+    badge.style.display = '';
+    badge.textContent = currentAccount.name || currentAccount.username || 'Signed in';
+  } else {
+    signInBtn.style.display = '';
+    signOutBtn.style.display = 'none';
+    badge.style.display = 'none';
+  }
+}
+
+async function initAuth(){
+  if(typeof msal === 'undefined'){
+    updateSyncStatus('Sign-in unavailable (auth library failed to load) — working locally', true);
+    return;
+  }
+  try{
+    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    await msalInstance.initialize();
+    const response = await msalInstance.handleRedirectPromise();
+    if(response && response.account){
+      currentAccount = response.account;
+    } else {
+      const accounts = msalInstance.getAllAccounts();
+      if(accounts.length > 0) currentAccount = accounts[0];
+    }
+    if(currentAccount){
+      msalInstance.setActiveAccount(currentAccount);
+      updateAuthUI(true);
+      maybeShowWelcome();
+      await startSyncedSession();
+    } else {
+      updateAuthUI(false);
+      showIntro();
+    }
+  }catch(err){
+    console.error('Auth init failed', err);
+    updateSyncStatus('Sign-in error — working locally', true);
+    localStorage.setItem('sl_signin_attempt', String(Date.now()));
+    showIntro();
+  }
+}
+
+function signIn(){
+  if(!msalInstance){
+    showToast('Sign-in is unavailable right now (auth library failed to load). Try refreshing the page.');
+    return;
+  }
+  try{ localStorage.removeItem('sl_signed_out'); }catch(e){}
+  msalInstance.loginRedirect({scopes: GRAPH_SCOPES});
+}
+function signOut(){
+  // Local-only sign-out: clears this board's session in this browser tab
+  // and reloads. Deliberately NOT using msalInstance.logoutRedirect() here -
+  // that performs a full Microsoft 365 sign-out at Azure AD (ending Outlook/
+  // Teams/etc. sessions too) and redirects to whatever page Microsoft's own
+  // post-logout flow decides on, which is outside this app's control.
+  if(pollTimer) clearInterval(pollTimer);
+  try{ sessionStorage.clear(); localStorage.setItem('sl_signed_out','1'); }catch(e){}
+  location.reload();
+}
+document.getElementById('signInBtn').addEventListener('click', signIn);
+document.getElementById('signOutBtn').addEventListener('click', signOut);
+
+async function getAccessToken(){
+  const account = currentAccount || (msalInstance && msalInstance.getActiveAccount());
+  if(!msalInstance || !account) throw new Error('Not signed in');
+  try{
+    const result = await msalInstance.acquireTokenSilent({scopes: GRAPH_SCOPES, account});
+    return result.accessToken;
+  }catch(err){
+    if(err instanceof msal.InteractionRequiredAuthError){
+      await msalInstance.acquireTokenRedirect({scopes: GRAPH_SCOPES, account});
+      return null; // navigates away; execution stops here
+    }
+    throw err;
+  }
+}
+
+async function graphFetch(pathOrUrl, options){
+  const token = await getAccessToken();
+  if(!token) throw new Error('No access token');
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : GRAPH_BASE + pathOrUrl;
+  // Only send Content-Type when there's an actual JSON body (POST/PATCH).
+  // SharePoint-backed Graph endpoints (like /sites/{id}/lists) can reject a
+  // bodyless GET that carries a Content-Type header with a misleading 403
+  // accessDenied instead of a clean error - this bit us in testing.
+  const hasBody = !!(options && options.body != null);
+  const headers = {
+    'Authorization': 'Bearer ' + token,
+    ...(hasBody ? {'Content-Type': 'application/json'} : {}),
+    ...((options && options.headers) || {})
+  };
+  const res = await fetch(url, { ...options, headers });
+  if(!res.ok){
+    let bodyText = '';
+    try{ bodyText = await res.text(); }catch(e){}
+    const err = new Error(`Graph API ${res.status}: ${bodyText}`);
+    err.status = res.status;
+    throw err;
+  }
+  if(res.status === 204) return null;
+  return res.json();
+}
+
+async function resolveSite(){
+  if(siteId) return siteId;
+  const cached = sessionStorage.getItem('sallee_sp_site_id');
+  if(cached){ siteId = cached; return siteId; }
+  const site = await graphFetch(`/sites/${SHAREPOINT_HOSTNAME}:${SHAREPOINT_SITE_PATH}`);
+  siteId = site.id;
+  sessionStorage.setItem('sallee_sp_site_id', siteId);
+  return siteId;
+}
+
+async function findOrCreateList(name, columns){
+  const sid = await resolveSite();
+  const cacheKey = 'sallee_sp_list_' + name;
+  const cached = sessionStorage.getItem(cacheKey);
+  if(cached) return cached;
+  // NOTE: deliberately not using ?$filter=displayName eq '...' here - Graph's
+  // SharePoint-lists endpoint doesn't reliably support that filter and can
+  // return a misleading 403 instead of just failing the filter. A site has
+  // only a handful of lists, so fetching all and matching client-side is
+  // cheap and far more reliable.
+  const allLists = await graphFetch(`/sites/${sid}/lists`);
+  const existingMatch = (allLists.value || []).find(l => l.displayName === name);
+  if(existingMatch){
+    sessionStorage.setItem(cacheKey, existingMatch.id);
+    return existingMatch.id;
+  }
+  const created = await graphFetch(`/sites/${sid}/lists`, {
+    method:'POST',
+    body: JSON.stringify({
+      displayName: name,
+      columns: columns,
+      list: {template:'genericList'}
+    })
+  });
+  sessionStorage.setItem(cacheKey, created.id);
+  return created.id;
+}
+
+async function spListItems(listId){
+  const sid = await resolveSite();
+  const results = [];
+  let url = `/sites/${sid}/lists/${listId}/items?expand=fields&$top=200`;
+  while(url){
+    const page = await graphFetch(url);
+    results.push(...(page.value||[]));
+    url = page['@odata.nextLink'] || null;
+  }
+  return results;
+}
+async function spCreateItem(listId, fields){
+  const sid = await resolveSite();
+  return graphFetch(`/sites/${sid}/lists/${listId}/items`, {
+    method:'POST',
+    body: JSON.stringify({fields})
+  });
+}
+async function spUpdateItem(listId, itemId, fields){
+  const sid = await resolveSite();
+  return graphFetch(`/sites/${sid}/lists/${listId}/items/${itemId}/fields`, {
+    method:'PATCH',
+    body: JSON.stringify(fields)
+  });
+}
+async function spDeleteItem(listId, itemId){
+  const sid = await resolveSite();
+  return graphFetch(`/sites/${sid}/lists/${listId}/items/${itemId}`, {method:'DELETE'});
+}
+
+// NOTE: driver/job "id" is the SharePoint item id once synced (matching the
+// pre-existing "DriverId" foreign-key column on Jobs) - there's no separate
+// LocalId field on these lists. A brand-new driver/job gets a temporary
+// local id for optimistic UI until its create call comes back; see
+// syncDriverUpsert for how a driver's id gets swapped to the real one (and
+// any jobs already pointing at the temp id get repointed).
+function driverToFields(drv){
+  return {
+    Title: drv.name1 || drv.id,
+    Name2: drv.name2||'',
+    Truck: drv.truck||'',
+    Trailer: drv.trailer||'',
+    Location: drv.location||''
+  };
+}
+function fieldsToDriver(item){
+  const f = item.fields || {};
+  return {
+    id: item.id,
+    name1: f.Title||'',
+    name2: f.Name2||'',
+    truck: f.Truck||'',
+    trailer: f.Trailer||'',
+    location: f.Location||'',
+    _spItemId: item.id
+  };
+}
+// Human-readable "Name (Truck ####)" label for a driver id - used only to
+// populate a read-only DriverName field on the Jobs list, so the raw
+// SharePoint list is understandable to someone browsing it directly
+// (DriverId stays the real foreign key the app itself relies on; this is
+// purely a display convenience layered on top, does not affect app behavior).
+function driverNameForSync(driverId){
+  const d = drivers.find(x=>x.id===driverId);
+  if(!d) return '';
+  return d.truck ? `${d.name1||'?'} (Truck ${d.truck})` : (d.name1||'');
+}
+function jobToFields(job){
+  return {
+    Title: `${job.origin||'?'} -> ${job.destination||'?'}`.slice(0,255),
+    JobDate: job.date||'',
+    DriverId: job.assignedDriverId||'',
+    DriverName: driverNameForSync(job.assignedDriverId),
+    SortOrder: job.order||0,
+    JobType: job.type||'normal',
+    MainTime: job.maintTime||'',
+    Technician: job.technician||'',
+    Customer: job.customer||'',
+    Origin: job.origin||'',
+    OriginFarm: job.originFarm||'',
+    Destination: job.destination||'',
+    DestinationFarm: job.destinationFarm||'',
+    AdditionalStops: job.additionalStops||'',
+    TimeIn: job.timeIn||'',
+    TimeOut: job.timeOut||'',
+    LoadTime: job.time||'',
+    LoadType: job.loadType||'',
+    LoadboardRef: job.loadBoardRef||'',
+    Notes: job.notes||''
+  };
+}
+function fieldsToJob(item){
+  const f = item.fields || {};
+  return {
+    id: item.id,
+    date: f.JobDate||'',
+    assignedDriverId: f.DriverId||null,
+    order: Number(f.SortOrder)||0,
+    type: f.JobType||'normal',
+    maintTime: f.MainTime||'',
+    technician: f.Technician||'',
+    customer: f.Customer||'',
+    origin: f.Origin||'',
+    originFarm: f.OriginFarm||'',
+    destination: f.Destination||'',
+    destinationFarm: f.DestinationFarm||'',
+    additionalStops: f.AdditionalStops||'',
+    timeIn: f.TimeIn||'',
+    timeOut: f.TimeOut||'',
+    time: f.LoadTime||'',
+    loadType: f.LoadType||'',
+    loadBoardRef: f.LoadboardRef||'',
+    notes: f.Notes||'',
+    _spItemId: item.id
+  };
+}
+
+async function seedListToSharePoint(listId, localArray, mapFn){
+  // Returns a map of old (temporary local) id -> new SharePoint item id,
+  // and updates each item's own .id in place to match - needed because
+  // these lists use SharePoint's own item id as identity (no LocalId field).
+  const idMap = {};
+  for(const item of localArray){
+    try{
+      const created = await spCreateItem(listId, mapFn(item));
+      const oldId = item.id;
+      item._spItemId = created.id;
+      item.id = created.id;
+      idMap[oldId] = created.id;
+    }catch(e){ console.error('Seed failed for', item.id, e); }
+  }
+  return idMap;
+}
+
+async function pullFromSharePoint(){
+  const [driverItems, jobItems] = await Promise.all([
+    spListItems(driversListId),
+    spListItems(jobsListId)
+  ]);
+
+  if(driverItems.length){
+    drivers = driverItems.map(fieldsToDriver).filter(d=>d.id);
+  } else if(drivers.length){
+    const idMap = await seedListToSharePoint(driversListId, drivers, driverToFields);
+    // Repoint any jobs assigned via a driver's old temporary local id.
+    jobs.forEach(j=>{
+      if(j.assignedDriverId && idMap[j.assignedDriverId]) j.assignedDriverId = idMap[j.assignedDriverId];
+    });
+  }
+
+  if(jobItems.length){
+    jobs = jobItems.map(fieldsToJob).filter(j=>j.id);
+  } else if(jobs.length){
+    await seedListToSharePoint(jobsListId, jobs, jobToFields);
+  }
+
+  jobIdCounter = jobs.reduce((m,j)=>Math.max(m, parseInt((j.id||'j0').replace('j',''))||0), 0) + 1;
+  saveAll();
+  render();
+}
+
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    const anyModalOpen = document.getElementById('jobModalOverlay').classList.contains('open')
+      || document.getElementById('driverModalOverlay').classList.contains('open');
+    if(anyModalOpen || importing) return;
+    try{
+      await pullFromSharePoint();
+      updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+    }catch(err){
+      console.warn('Background sync failed', err);
+    }
+  }, 90000);
+}
+
+async function startSyncedSession(){
+  updateSyncStatus('Connecting to SharePoint…');
+  try{
+    driversListId = await findOrCreateList(DRIVERS_LIST_NAME, DRIVERS_COLUMNS);
+    jobsListId = await findOrCreateList(JOBS_LIST_NAME, JOBS_COLUMNS);
+    await pullFromSharePoint();
+    syncEnabled = true;
+    isViewOnly = false;
+    updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+    startPolling();
+  }catch(err){
+    console.error('SharePoint sync failed', err);
+    updateSyncStatus('Could not connect to SharePoint — showing locally saved data', true);
+  }
+}
+
+function handleSyncError(err, actionDesc){
+  console.error('Sync error:', err);
+  if(err && err.status === 403){
+    isViewOnly = true;
+    updateSyncStatus('View-only access — changes are not saved to SharePoint', true);
+    showToast("You have view-only access to this board, so this change wasn't saved to SharePoint (it's kept only on this device). Ask your dispatch admin for edit access if you need to make changes.");
+  } else {
+    updateSyncStatus('Sync error — change saved locally only', true);
+    showToast(`Couldn't ${actionDesc} to SharePoint (offline or connection issue). It's saved on this device and will sync once reconnected.`);
+  }
+}
+
+async function syncJobsUpsert(jobList){
+  if(!syncEnabled) return;
+  for(const job of jobList){
+    try{
+      if(job._spItemId){
+        await spUpdateItem(jobsListId, job._spItemId, jobToFields(job));
+      } else {
+        const created = await spCreateItem(jobsListId, jobToFields(job));
+        job._spItemId = created.id;
+        saveAll();
+      }
+      updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+    }catch(err){
+      handleSyncError(err, 'save this job');
+    }
+  }
+}
+// ONE-TIME MIGRATION UTILITY - not called by the app itself, and does not
+// change how the board looks or behaves. Run manually from the browser
+// console (while signed in with edit access, on the live dispatch board
+// page) to backfill the read-only "DriverName" field on every already-synced
+// Jobs row, so older rows saved before that column existed get the same
+// human-readable label new saves already write. Safe to run more than once.
+// Usage: open console on the live board, signed in, then run:
+//   await backfillDriverNames()
+window.backfillDriverNames = async function(){
+  if(!syncEnabled || !jobsListId){
+    console.error('Not signed in / not synced yet - sign in first, then re-run this.');
+    return;
+  }
+  let updated = 0, skipped = 0, failed = 0;
+  for(const job of jobs){
+    if(!job._spItemId){ skipped++; continue; }
+    try{
+      await spUpdateItem(jobsListId, job._spItemId, { DriverName: driverNameForSync(job.assignedDriverId) });
+      updated++;
+    }catch(err){
+      failed++;
+      console.error('Failed to backfill job', job.id, err);
+    }
+  }
+  console.log(`Backfill done. Updated: ${updated}, skipped (not yet synced): ${skipped}, failed: ${failed}.`);
+};
+
+async function syncJobDelete(job){
+  if(!syncEnabled || !job._spItemId) return;
+  try{
+    await spDeleteItem(jobsListId, job._spItemId);
+    updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+  }catch(err){
+    handleSyncError(err, 'delete this job');
+  }
+}
+async function syncDriverUpsert(drv){
+  if(!syncEnabled) return;
+  try{
+    if(drv._spItemId){
+      await spUpdateItem(driversListId, drv._spItemId, driverToFields(drv));
+    } else {
+      const created = await spCreateItem(driversListId, driverToFields(drv));
+      // Adopt SharePoint's item id as this driver's real id (there's no
+      // separate LocalId field) - and repoint any jobs that were assigned
+      // to this driver using its temporary local id before the create
+      // finished, so the DriverId foreign key stays correct.
+      const oldId = drv.id;
+      drv._spItemId = created.id;
+      drv.id = created.id;
+      if(oldId !== drv.id){
+        jobs.forEach(j=>{ if(j.assignedDriverId===oldId) j.assignedDriverId = drv.id; });
+      }
+      saveAll();
+      render();
+    }
+    updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+  }catch(err){
+    handleSyncError(err, 'save this driver');
+  }
+}
+async function syncDriverDelete(drv){
+  if(!syncEnabled || !drv._spItemId) return;
+  try{
+    await spDeleteItem(driversListId, drv._spItemId);
+    updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
+  }catch(err){
+    handleSyncError(err, 'remove this driver');
+  }
+}
+
+/* ---- Local chart parser (Excel -> drivers + jobs). Pure function: takes a SheetJS worksheet. ---- */
+function parseLocalChart(ws, opts){
+  opts = opts || {};
+  const rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:true});
+  const cell = (r,c)=>{ const row=rows[r-1]; return row && row[c-1]!==undefined ? row[c-1] : null; };
+  const isStr = v=>typeof v==='string' && v.trim()!=='';
+  const isTime = v=>typeof v==='number' && v>0 && v<1;
+  const result = {drivers:[], jobs:[], warnings:[], firstDate:null, lastDate:null, days:0, statusCount:0, noteCount:0, skipped:{}};
+
+  /* --- driver column pairs (row 1 names, row 3 type) --- */
+  const TYPE_MAP = (t)=>{
+    const s=String(t||'').toUpperCase().replace(/\s+/g,' ').trim();
+    if(s==='LOCAL / OTR' || s==='LOCAL/OTR') return 'LOCAL_OTR';
+    if(s.startsWith('AGENT')) return 'AGENT';
+    if(s==='PT') return 'PT';
+    return 'LOCAL'; // LOCAL, and anything else on a local chart
+  };
+  let emptyRun=0;
+  for(let c=2;c<=80;c+=2){
+    const name=cell(1,c);
+    if(isStr(name)){
+      emptyRun=0;
+      const truckCell=cell(1,c+1);
+      let truck='',trailer='';
+      if(typeof truckCell==='number'){ truck=String(truckCell); }
+      else if(isStr(truckCell)){ const parts=truckCell.split('/'); truck=parts[0].trim(); trailer=(parts[1]||'').trim(); }
+      result.drivers.push({col:c, name1:name.trim(), name2:'', truck, trailer, location:TYPE_MAP(cell(3,c)), equipment:String(cell(2,c+1)||'').trim()});
+    } else {
+      emptyRun++;
+      if(emptyRun>=3 && result.drivers.length) break;
+    }
+  }
+  if(!result.drivers.length){ result.warnings.push('No driver columns found in row 1.'); return result; }
+
+  /* --- day blocks: weekday labels (MON/TUE..) in column A, date in the row below.
+         Rows get inserted on busy days, so spacing between labels varies (7-31 rows).
+         A day's block starts 7 rows above its label and runs until the next day's block starts. --- */
+  const DOW=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const labelRows=[];
+  // a "label" = a short word in column A (MON, TUES, THURS... tolerates typos like "TUH"; the date may sit above or below it)
+  for(let r=4;r<=rows.length;r++){ const v=cell(r,1); if(isStr(v) && /^[A-Za-z]{3,6}$/.test(v.trim())) labelRows.push(r); }
+  if(!labelRows.length){ result.warnings.push('Could not find any day labels (MON/TUE/...) in column A.'); return result; }
+  const firstSerial=typeof cell(labelRows[0]+1,1)==='number' ? cell(labelRows[0]+1,1) : cell(labelRows[0]-1,1);
+  if(typeof firstSerial!=='number'){ result.warnings.push('Could not read the first date under the first day label.'); return result; }
+  const p=XLSX.SSF.parse_date_code(firstSerial);
+  result.parsedStart=new Date(Date.UTC(p.y,p.m-1,p.d)).toISOString().slice(0,10);
+  let baseUTC=Date.UTC(p.y,p.m-1,p.d);
+  if(opts.startDate){ const [y,m,d]=opts.startDate.split('-').map(Number); baseUTC=Date.UTC(y,m-1,d); }
+  const dateStrAt=i=>new Date(baseUTC+i*86400000).toISOString().slice(0,10);
+  const dowAt=i=>new Date(baseUTC+i*86400000).getUTCDay();
+  result.firstLabel=cell(labelRows[0],1).trim().toUpperCase().slice(0,3);
+  if(DOW[dowAt(0)]!==result.firstLabel){ result.warnings.push(`The first day in this chart is labelled ${result.firstLabel}, but ${dateStrAt(0)} is a ${DOW[dowAt(0)]}. Pick a first date that is a ${result.firstLabel}.`); return result; }
+
+  // Consecutive days = labels that follow the weekday sequence. A stray typo is warned about and tolerated;
+  // 3 wrong labels in a row means we've run into a stale/leftover copy, so stop there.
+  let days=0,bad=0;
+  for(let i=0;i<labelRows.length;i++){
+    const lab=cell(labelRows[i],1).trim().toUpperCase();
+    if(lab.slice(0,3)===DOW[dowAt(i)]){ bad=0; days=i+1; }
+    else{
+      bad++;
+      if(bad>=3){ days=i-2; break; }
+      days=i+1;
+      result.warnings.push(`Row ${labelRows[i]}: label "${lab}" where ${DOW[dowAt(i)]} was expected (counted as ${DOW[dowAt(i)]} ${dateStrAt(i)}).`);
+    }
+  }
+  result.days=days;
+  result.firstDate=dateStrAt(0); result.lastDate=dateStrAt(days-1);
+  const blockStart=i=>Math.max(4,labelRows[i]-7);
+  const blockEnd=i=>(i+1<days)?labelRows[i+1]-8:labelRows[i]+7;
+
+  /* --- time helpers --- */
+  const hhmm=m=>String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+  const fromFraction=v=>hhmm(Math.round(v*1440));
+  const pretty=t=>{ const [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; return `${((h+11)%12)+1}:${String(m).padStart(2,'0')} ${ap}`; };
+  function parseTimeCell(v){
+    if(isTime(v)) return {time:fromFraction(v)};
+    if(isStr(v)){
+      const s=v.trim().toUpperCase().replace(/O/g,'0');
+      const m=s.match(/^(\d{1,2})(?::(\d{2}))?:?\s*(AM|PM)?$/);
+      if(m){ let h=+m[1], mi=+(m[2]||0); if(m[3]==='PM'&&h<12)h+=12; if(m[3]==='AM'&&h===12)h=0; if(h<24&&mi<60) return {time:hhmm(h*60+mi)}; }
+      return {raw:v.trim()};
+    }
+    return {};
+  }
+  const txt=v=>isStr(v)?v.trim().replace(/\s+/g,' '):'';
+  const STATUS=new Set(['UNPAID','OFF','VACATION','PERSONAL','SICK','HOME','NO SHOW / NO CALL']);
+  const HEADER_WORDS=new Set(['KY','KY /LA','LOCAL','LOCAL / OTR','LOCAL/OTR','AGENT/DRIVER','PT','GN','6H','3H','BV','LA']);
+  // second line of a job group: DROP, RACE & RETURN, BREEDING TRIP, NIGHT BREEDING TRIP, SHUTTLE, WAIT & RETURN, SWAP ...
+  const JOBLINE=/DROP|RACE|SWAP|BREEDING|SHUTTLE|WAIT|RETURN|TRIP|PICK ?UP|DELIVER/i;
+  const KIND=k=>{
+    k=k.toUpperCase();
+    if(k.includes('NIGHT') && k.includes('BREEDING')) return 'night_breeding';
+    if(k.includes('BREEDING')) return 'breeding';
+    if(k.includes('SHUTTLE')) return 'shuttle';
+    if(k.includes('WAIT')) return 'wait_return';
+    if(k.includes('RACE')) return 'race_and_return';
+    if(k.includes('SWAP')) return 'swap';
+    if(/^DROP\b/.test(k)) return 'drop';
+    return 'other';
+  };
+
+  /* --- walk each driver, each day block (two passes: find job groups, then deal with leftovers) --- */
+  const prettyT=v=>pretty(fromFraction(v));
+  const stripTag=n=>n.toUpperCase().replace(/#\d+/g,'').replace(/[^A-Z0-9]/g,'');
+  const driverKeys=new Set(result.drivers.map(d=>stripTag(d.name1)));
+  const looksLikeTruck=v=>/^\d{3}\s*\/\s*\d+[A-Z+]*(\s*\(.*\))?$/i.test(v) || /^P\d+\s*\/\s*\d+/i.test(v);
+  result.drivers.forEach(drv=>{
+    const c=drv.col;
+    for(let i=0;i<days;i++){
+      const date=dateStrAt(i);
+      const start=blockStart(i), end=blockEnd(i);
+      let order=0;
+      // pass 1: job groups = customer row, type line, origin/destination row
+      const groups=[];
+      for(let r=start;r<=end;){
+        const a=cell(r,c);
+        if(isStr(a)){
+          const label=txt(a);
+          if(stripTag(label)===stripTag(drv.name1)){ r+=3; continue; } // weekly header repeat (name / type / LOCAL rows)
+          const b=cell(r+1,c);
+          if(!STATUS.has(label.toUpperCase()) && isStr(b) && b.trim().length<=30 && JOBLINE.test(b.trim())){ groups.push(r); r+=3; continue; }
+        }
+        r++;
+      }
+      const inGroup=new Set(); groups.forEach(g=>{inGroup.add(g);inGroup.add(g+1);inGroup.add(g+2);});
+      const tagRows=new Set(); // preamble rows consumed by a job below them
+      let prevEnd=start-1;
+      groups.forEach(r=>{
+        const label=txt(cell(r,c)), b=cell(r+1,c);
+        const when=parseTimeCell(cell(r,c+1));
+        const job={date,driverCol:c,order:0,type:'normal',customer:label,
+          origin:txt(cell(r+2,c)),destination:txt(cell(r+2,c+1)),time:when.time||'',timeIn:'',timeOut:'',notes:'',loadType:KIND(b.trim())};
+        const bits=[];
+        if(job.loadType==='other' || /CANCEL/i.test(b)) bits.push(txt(b));
+        if(when.raw) bits.push('Time: '+when.raw);
+        const lineNote=txt(cell(r+1,c+1)); if(lineNote) bits.push(lineNote);
+        // preamble just above the job: row r-1 left = IN time (told to report), row r-2 = OUT time or "WD" (when done)
+        const pre=[];
+        const isWD=v=>isStr(v) && /^\s*W\.?D\.?\s*$/i.test(v);
+        for(let rr=Math.max(prevEnd+1,start,r-3); rr<=r-1; rr++){
+          const L=cell(rr,c), R=cell(rr,c+1);
+          if(rr===r-1){
+            if(isTime(L)){ job.timeIn=fromFraction(L); tagRows.add(rr); }
+            if(isTime(R)){ pre.push('Also '+prettyT(R)); tagRows.add(rr); }
+          } else if(rr===r-2){
+            let o=null;
+            if(isWD(L)||isTime(L)){ o=L; if(isTime(R)) pre.push('Also '+prettyT(R)); }
+            else if(isWD(R)||isTime(R)){ o=R; }
+            if(o!==null){ job.timeOut = isWD(o) ? 'WD' : fromFraction(o); tagRows.add(rr); }
+            if(isStr(R) && !isWD(R)){ const t=txt(R); pre.push(looksLikeTruck(t)?'Truck '+t:t); tagRows.add(rr); }
+          } else {
+            if(isStr(R)){ const t=txt(R); if(!isWD(R)){ pre.push(looksLikeTruck(t)?'Truck '+t:t); tagRows.add(rr); } }
+            if(isTime(R)){ pre.push(prettyT(R)); tagRows.add(rr); }
+          }
+        }
+        // out times are written without AM/PM (3:30 means 3:30 PM): move them to the afternoon when needed
+        if(job.timeOut && job.timeOut!=='WD'){
+          let [oh,om]=job.timeOut.split(':').map(Number);
+          const inMin=job.timeIn ? (+job.timeIn.slice(0,2))*60+(+job.timeIn.slice(3)) : null;
+          const outMin=oh*60+om;
+          if(oh<12 && (inMin===null ? oh<=7 : outMin<=inMin)) job.timeOut=hhmm(outMin+720);
+        }
+        if(pre.length) bits.push(pre.join(' · '));
+        job.notes=bits.join(' · ');
+        job._row=r;
+        prevEnd=r+2;
+        job.order=0;
+        result.jobs.push(job);
+      });
+      // pass 2: everything else in this block for this driver
+      for(let r=start;r<=end;r++){
+        if(inGroup.has(r)) continue;
+        const a=cell(r,c); if(!isStr(a)) continue;
+        const label=txt(a), U=label.toUpperCase();
+        if(tagRows.has(r) && label.length<=4) continue;               // "WD"-style tag already attached to a job
+        if(stripTag(label)===stripTag(drv.name1)) { r+=2; continue; } // header repeat
+        if(driverKeys.has(stripTag(label)) || HEADER_WORDS.has(U) || looksLikeTruck(label)) continue;
+        if(U==='CALLED' && isStr(cell(r+1,c)) && driverKeys.has(stripTag(cell(r+1,c)))) continue;
+        if(STATUS.has(U)){ result.jobs.push({date,driverCol:c,order:0,type:'vacation',notes:label}); result.statusCount++; continue; }
+        if(U==='WD' || U==='CALLED'){ result.skipped[U]=(result.skipped[U]||0)+1; continue; } // layout markers, counted but not imported as cards
+        result.jobs.push({date,driverCol:c,order:0,type:'note',notes:label}); result.noteCount++;
+      }
+    }
+  });
+  // stable order within each driver/day: by sheet position for jobs, then statuses/notes
+  const cnt={};
+  result.jobs.forEach(j=>{ const k=j.date+'|'+j.driverCol; cnt[k]=(cnt[k]||0)+1; j.order=cnt[k]; delete j._row; });
+  return result;
+}
+
+
+/* ============================================================
+   LOCAL BOARD ADDITIONS
+   ============================================================ */
+
+// Optional: paste the URL of a photo (PNG with transparent background works best) of a Sallee van here
+// and it replaces the drawn van on the sign-in screen. Leave '' to use the drawing.
+const VAN_PHOTO_URL = '';
+if(VAN_PHOTO_URL){
+  const vanEl = document.getElementById('van');
+  vanEl.innerHTML = `<img src="${VAN_PHOTO_URL}" alt="">`;
+}
+
+/* ---------- In / Out times (the times drivers are told to be in and out; Out can be "WD" = when done) ---------- */
+function normalizeOutTime(v){
+  v = (v||'').trim(); if(!v) return '';
+  if(/^w\.?d\.?$|^when done$/i.test(v)) return 'WD';
+  const m = v.toUpperCase().replace(/O/g,'0').match(/^(\d{1,2})(?::?(\d{2}))?\s*(AM|PM)?$/);
+  if(m){ let h=+m[1], mi=+(m[2]||0); if(m[3]==='PM'&&h<12) h+=12; if(m[3]==='AM'&&h===12) h=0;
+    if(h<24&&mi<60) return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0'); }
+  return v;
+}
+function outDisplay(v){ return !v ? '' : (/^\d{1,2}:\d{2}$/.test(v) ? formatTimeDisplay(v) : v); }
+
+/* ---------- place suggestions (free-text origin/destination with autocomplete from past jobs) ---------- */
+function refreshPlaceList(){
+  const set = new Set(['SALLEE BARN']);
+  jobs.forEach(j=>{ [j.origin,j.destination].forEach(x=>{ if(x && x.trim()) set.add(x.trim()); }); });
+  document.getElementById('placeList').innerHTML = [...set].sort().map(v=>`<option value="${escapeHtml(v)}">`).join('');
+}
+
+/* ---------- sign-in intro ---------- */
+function introSkipAutoSignIn(){
+  // Don't bounce straight back to Microsoft after an explicit sign-out, or right after a failed attempt.
+  if(localStorage.getItem('sl_signed_out')==='1') return true;
+  const t = Number(localStorage.getItem('sl_signin_attempt')||0);
+  return (Date.now()-t) < 30000;
+}
+let introTimers = [];
+function showIntro(){
+  const el = document.getElementById('intro');
+  if(el.classList.contains('show')) return;
+  el.classList.add('show');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('go')));
+  const manualOnly = introSkipAutoSignIn();
+  if(manualOnly) document.getElementById('introSub').textContent = 'Signed out';
+  let proceeded = false;
+  const proceed = ()=>{
+    if(proceeded) return; proceeded = true;
+    introTimers.forEach(clearTimeout);
+    el.classList.add('parked');
+    if(!manualOnly){
+      document.getElementById('introSub').textContent = 'Signing you in…';
+      setTimeout(()=>{ localStorage.setItem('sl_signin_attempt', String(Date.now())); signIn(); }, 650);
+    }
+  };
+  introTimers.push(setTimeout(()=>el.classList.add('parked'), 3300));
+  introTimers.push(setTimeout(proceed, 4700));
+  el.addEventListener('click', (e)=>{
+    if(e.target.closest('#introSignInBtn')) return;
+    if(!el.classList.contains('parked')){ el.classList.add('parked'); }
+    proceed();
+  });
+  document.getElementById('introSignInBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    localStorage.setItem('sl_signin_attempt', String(Date.now()));
+    signIn();
+  });
+}
+
+/* ---------- welcome: spoken greeting once per day ---------- */
+function firstNameFrom(acct){
+  let n = ((acct && acct.name) || '').trim();
+  if(!n && acct && acct.username) n = acct.username.split('@')[0].replace(/[._]+/g,' ');
+  if(n.includes(',')) n = n.split(',')[1].trim();            // "Last, First"
+  n = (n.split(/\s+/)[0] || '').trim();
+  return n ? n.charAt(0).toUpperCase() + n.slice(1).toLowerCase() : 'Friend';
+}
+function maybeShowWelcome(){
+  if(!currentAccount) return;
+  const key = 'sl_welcome_' + (currentAccount.username || 'user');
+  const today = fmtDate(new Date());
+  let seen = null; try{ seen = localStorage.getItem(key); }catch(e){}
+  if(seen === today) return;
+  showWelcome(firstNameFrom(currentAccount), ()=>{ try{ localStorage.setItem(key, today); }catch(e){} });
+}
+function startDrone(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return null;
+  const ctx = new AC();
+  const master = ctx.createGain(); master.gain.value = 0;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  // generated reverb tail
+  const len = ctx.sampleRate * 3.2, ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for(let ch=0; ch<2; ch++){ const d = ir.getChannelData(ch); for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, 2.6); }
+  const conv = ctx.createConvolver(); conv.buffer = ir;
+  const wet = ctx.createGain(); wet.gain.value = 1.1;
+  [[55,'sine',.5],[82.41,'sine',.36],[110.5,'triangle',.16],[164.8,'sine',.12],[246.9,'sine',.05]].forEach(([f,type,g])=>{
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = (Math.random()-.5)*14;
+    const og = ctx.createGain(); og.gain.value = g;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = .06 + Math.random()*.12;
+    const lg = ctx.createGain(); lg.gain.value = g*.45;
+    lfo.connect(lg); lg.connect(og.gain); o.connect(og); og.connect(lp); o.start(); lfo.start();
+  });
+  lp.connect(master); lp.connect(conv); conv.connect(wet); wet.connect(master); master.connect(ctx.destination);
+  master.gain.linearRampToValueAtTime(.2, ctx.currentTime + 1.4);
+  function chime(){
+    [659.3, 987.8, 1318.5].forEach((f,i)=>{
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const g = ctx.createGain(); const t = ctx.currentTime + i*.09;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.05/(i+1), t+.02); g.gain.exponentialRampToValueAtTime(.0001, t+3.2);
+      o.connect(g); g.connect(conv); g.connect(master); o.start(t); o.stop(t+3.4);
+    });
+  }
+  function stop(sec){
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.linearRampToValueAtTime(0, t+sec);
+    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, sec*1000 + 300);
+  }
+  return {chime, stop};
+}
+function pickVoice(){
+  const synth = window.speechSynthesis; if(!synth) return null;
+  const en = synth.getVoices().filter(v=>/^en/i.test(v.lang));
+  const prefs = [/Davis/i,/Guy/i,/Christopher/i,/Ryan/i,/Eric/i,/Brian/i,/Google UK English Male/i,/Daniel/i,/Alex/i,/Fred/i,/Male/i];
+  for(const p of prefs){ const v = en.find(x=>p.test(x.name)); if(v) return v; }
+  return en[0] || null;
+}
+function speakWelcome(name, onDone){
+  const synth = window.speechSynthesis;
+  let finished = false;
+  const fin = ()=>{ if(!finished){ finished = true; onDone(); } };
+  if(!synth || typeof SpeechSynthesisUtterance === 'undefined'){ setTimeout(fin, 3500); return; }
+  try{ synth.cancel(); }catch(e){}
+  const voice = pickVoice();
+  const main = new SpeechSynthesisUtterance(`Welcome... ${name}.`);
+  main.rate = .7; main.pitch = .5; main.volume = 1; if(voice) main.voice = voice;
+  const echo = new SpeechSynthesisUtterance(`${name}...`);
+  echo.rate = .6; echo.pitch = .3; echo.volume = .22; if(voice) echo.voice = voice;
+  main.onend = ()=>{ setTimeout(()=>{ try{ synth.speak(echo); }catch(e){ fin(); } }, 350); };
+  main.onerror = fin; echo.onend = fin; echo.onerror = fin;
+  try{ synth.speak(main); }catch(e){ fin(); }
+  setTimeout(fin, 16000); // safety
+}
+function showWelcome(name, markSeen){
+  const el = document.getElementById('welcome');
+  const nameEl = document.getElementById('wName');
+  nameEl.innerHTML = [...name].map((ch,i)=>`<span style="animation-delay:${(0.9 + i*0.22).toFixed(2)}s">${escapeHtml(ch)}</span>`).join('');
+  el.classList.remove('out','speaking');
+  el.classList.add('show');
+  let used = false;
+  const btn = document.getElementById('wEnter');
+  const go = ()=>{
+    if(used) return; used = true;
+    markSeen();
+    el.classList.add('speaking');
+    const drone = startDrone();
+    setTimeout(()=>{ if(drone) drone.chime(); }, 450);
+    setTimeout(()=>{
+      speakWelcome(name, ()=>{
+        setTimeout(()=>{
+          if(drone) drone.stop(2.2);
+          el.classList.add('out');
+          setTimeout(()=>{ el.classList.remove('show','out','speaking'); }, 1500);
+        }, 900);
+      });
+    }, 900);
+  };
+  btn.onclick = go;
+}
+
+/* ---------- Excel import ---------- */
+let xlBuf = null, xlParsed = null, xlParsedSheet = null, importing = false;
+const xlEl = id=>document.getElementById(id);
+const driverKey = n=>String(n||'').toUpperCase().replace(/#\d+/g,'').replace(/[^A-Z0-9]/g,'');
+const LOAD_KIND_LABEL = {drop:'Drop', race_and_return:'Race & Return', swap:'Swap', breeding:'Breeding trip', night_breeding:'Night breeding trip', shuttle:'Shuttle', wait_return:'Wait & Return', other:'Other'};
+
+function defaultChartStart(sheetName, parsedStart){
+  const m = String(sheetName).match(/20\d\d/);
+  if(!m || !parsedStart) return parsedStart;
+  const y = Number(m[0]), py = Number(parsedStart.slice(0,4));
+  if(py === y || py === y-1) return parsedStart;                 // dates in the sheet look right for this year
+  const jan1 = new Date(Date.UTC(y,0,1));                        // otherwise: the Monday on/before Jan 1 of the tab's year
+  const back = (jan1.getUTCDay()+6)%7;
+  return new Date(jan1.getTime() - back*86400000).toISOString().slice(0,10);
+}
+function openImportModal(){
+  xlBuf = null; xlParsed = null; xlParsedSheet = null;
+  xlEl('xlFile').value = '';
+  xlEl('xlSheet').innerHTML = ''; xlEl('xlSheet').disabled = true;
+  xlEl('xlStart').value = ''; xlEl('xlStart').disabled = true;
+  xlEl('xlPreview').textContent = 'Nothing loaded yet.';
+  xlEl('xlGoBtn').disabled = true; xlEl('xlStatus').textContent = '';
+  xlEl('xlProgWrap').style.display = 'none';
+  xlEl('xlOverlay').classList.add('open');
+}
+function closeImportModal(){ if(importing) return; xlEl('xlOverlay').classList.remove('open'); }
+xlEl('importBtn').addEventListener('click', openImportModal);
+xlEl('xlCancelBtn').addEventListener('click', closeImportModal);
+
+xlEl('xlFile').addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  if(typeof XLSX === 'undefined'){ xlEl('xlPreview').textContent = 'The Excel reader failed to load (check your connection) - refresh and try again.'; return; }
+  xlEl('xlPreview').textContent = 'Reading file…';
+  try{
+    xlBuf = await f.arrayBuffer();
+    const names = XLSX.read(xlBuf,{type:'array',bookSheets:true}).SheetNames.filter(n=>/20\d\d/.test(n));
+    if(!names.length) throw new Error('No tab with a year in its name (like "Local KY Chart 2026") was found.');
+    const sel = xlEl('xlSheet');
+    sel.innerHTML = names.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    const thisYear = String(new Date().getFullYear());
+    sel.value = names.find(n=>n.includes(thisYear)) || names[0];
+    sel.disabled = false; xlEl('xlStart').disabled = false;
+    xlEl('xlStart').value = '';
+    runImportParse();
+  }catch(err){ xlEl('xlPreview').innerHTML = `<span class="xl-warn">Could not read that file: ${escapeHtml(err.message)}</span>`; }
+});
+xlEl('xlSheet').addEventListener('change', ()=>{ xlEl('xlStart').value = ''; runImportParse(); });
+xlEl('xlStart').addEventListener('change', ()=>runImportParse(true));
+
+function runImportParse(useTypedStart){
+  const name = xlEl('xlSheet').value;
+  xlEl('xlGoBtn').disabled = true; xlParsed = null;
+  xlEl('xlPreview').textContent = 'Reading the ' + name + ' tab…';
+  setTimeout(()=>{
+    try{
+      const wb = XLSX.read(xlBuf,{type:'array',sheets:name});
+      const ws = wb.Sheets[name];
+      let r = parseLocalChart(ws);
+      let start = useTypedStart ? xlEl('xlStart').value : defaultChartStart(name, r.parsedStart);
+      if(start && start !== r.parsedStart) r = parseLocalChart(ws,{startDate:start});
+      if(start) xlEl('xlStart').value = start;
+      xlParsed = r; xlParsedSheet = name;
+      renderImportPreview(r);
+    }catch(err){ xlEl('xlPreview').innerHTML = `<span class="xl-warn">Could not read that tab: ${escapeHtml(err.message)}</span>`; }
+  }, 30);
+}
+function renderImportPreview(r){
+  const normal = r.jobs.filter(j=>j.type==='normal');
+  if(!r.days || !normal.length){
+    xlEl('xlPreview').innerHTML = `<b>${escapeHtml(xlParsedSheet)}</b><br>${r.days ? `<span class="xl-warn">No jobs found in this tab yet</span>` : ''}${r.warnings.map(w=>`<div class="xl-warn">${escapeHtml(w)}</div>`).join('')}`
+      + (r.days ? `<div>It reads as ${r.days} days (${r.firstDate} to ${r.lastDate}) with ${r.drivers.length} driver columns. If the chart should have jobs, check "First day of this chart" above.</div>` : '');
+    return;
+  }
+  const exist = drivers.map(d=>driverKey(d.name1));
+  const newOnes = r.drivers.filter(d=>!exist.includes(driverKey(d.name1)));
+  const inRange = jobs.filter(j=>j.date>=r.firstDate && j.date<=r.lastDate).length;
+  const kinds = {}; normal.forEach(j=>kinds[j.loadType]=(kinds[j.loadType]||0)+1);
+  const noteTexts = {}; r.jobs.filter(j=>j.type==='note').forEach(j=>noteTexts[j.notes]=(noteTexts[j.notes]||0)+1);
+  const topNotes = Object.entries(noteTexts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([t,n])=>`${escapeHtml(t)} (${n})`).join(', ');
+  const skipped = Object.entries(r.skipped||{}).map(([k,n])=>`${k} ×${n}`).join(', ');
+  xlEl('xlPreview').innerHTML =
+    `<b>${escapeHtml(xlParsedSheet)}</b> &mdash; ${r.firstDate} to ${r.lastDate} (${r.days} days)<br>`
+    + `<b>${normal.length.toLocaleString()}</b> jobs &middot; <b>${r.statusCount}</b> off/unpaid days &middot; <b>${r.noteCount}</b> other notes<br>`
+    + `Drivers: ${r.drivers.map(d=>escapeHtml(d.name1)).join(', ')}`
+    + (newOnes.length ? `<br><b>${newOnes.length} new</b> to the board: ${newOnes.map(d=>escapeHtml(d.name1)).join(', ')}` : '<br>All drivers already on the board.')
+    + `<br>Job types: ${Object.entries(kinds).map(([k,n])=>`${LOAD_KIND_LABEL[k]||k} ${n}`).join(' &middot; ')}`
+    + (topNotes ? `<br>Other cells kept as note cards: ${topNotes}` : '')
+    + (skipped ? `<br>Layout markers skipped: ${escapeHtml(skipped)}` : '')
+    + (inRange ? `<br><span class="xl-warn">${inRange.toLocaleString()} jobs already on the board in these dates${xlEl('xlReplace').checked ? ' will be replaced' : ' will stay (you may get duplicates)'}.</span>` : '')
+    + r.warnings.map(w=>`<div class="xl-warn">&#9888; ${escapeHtml(w)}</div>`).join('');
+  xlEl('xlGoBtn').disabled = false;
+}
+xlEl('xlReplace').addEventListener('change', ()=>{ if(xlParsed) renderImportPreview(xlParsed); });
+
+const sleep = ms=>new Promise(res=>setTimeout(res,ms));
+async function graphBatch(requests){
+  // Graph $batch: up to 20 sub-requests per call. Retries anything throttled (429/503).
+  const out = {};
+  let pending = requests, attempt = 0;
+  while(pending.length && attempt < 6){
+    const res = await graphFetch('/$batch', {method:'POST', body: JSON.stringify({requests: pending})});
+    const retry = []; let wait = 0;
+    (res.responses||[]).forEach(r=>{
+      if(r.status === 429 || r.status === 503 || r.status === 504){
+        retry.push(pending.find(p=>p.id===r.id));
+        wait = Math.max(wait, (Number((r.headers||{})['Retry-After'])||2)*1000);
+      } else out[r.id] = r;
+    });
+    pending = retry.filter(Boolean);
+    if(pending.length){ attempt++; await sleep(wait || 2000); }
+  }
+  pending.forEach(p=>{ out[p.id] = {status:429, body:{error:'throttled'}}; });
+  return out;
+}
+function chunk(arr, n){ const out=[]; for(let i=0;i<arr.length;i+=n) out.push(arr.slice(i,i+n)); return out; }
+
+xlEl('xlGoBtn').addEventListener('click', async ()=>{
+  if(!xlParsed || importing) return;
+  importing = true;
+  const r = xlParsed;
+  const status = xlEl('xlStatus'), prog = xlEl('xlProg');
+  xlEl('xlGoBtn').disabled = true; xlEl('xlCancelBtn').disabled = true;
+  xlEl('xlProgWrap').style.display = 'block'; prog.style.width = '2%';
+  const setStatus = (t, pct)=>{ status.textContent = t; if(pct!=null) prog.style.width = Math.max(2,Math.min(100,pct)) + '%'; };
+  const live = syncEnabled;
+  try{
+    // 1) drivers
+    setStatus('Matching drivers…', 3);
+    const byCol = {}; const created = [];
+    r.drivers.forEach(d=>{
+      let ex = drivers.find(x=>driverKey(x.name1)===driverKey(d.name1));
+      if(!ex){
+        ex = {id:'d'+Date.now()+Math.random().toString(36).slice(2,6), name1:d.name1, name2:'', truck:d.truck, trailer:d.trailer, location:d.location};
+        drivers.push(ex); created.push(ex);
+      } else {
+        if(!ex.truck) ex.truck = d.truck; if(!ex.trailer) ex.trailer = d.trailer; if(!ex.location) ex.location = d.location;
+      }
+      byCol[d.col] = ex;
+    });
+    if(live && created.length){
+      setStatus('Adding ' + created.length + ' new driver(s) to SharePoint…', 5);
+      const sid = await resolveSite();
+      const resp = await graphBatch(created.map((d,i)=>({id:String(i), method:'POST', url:`/sites/${sid}/lists/${driversListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:driverToFields(d)}})));
+      created.forEach((d,i)=>{ const x = resp[String(i)]; if(x && x.status<300 && x.body && x.body.id){ d._spItemId = x.body.id; d.id = x.body.id; } });
+      if(created.some(d=>!d._spItemId)) throw new Error('Could not create some drivers on SharePoint (view-only access?).');
+    }
+    // 2) clear the date range (optional)
+    if(xlEl('xlReplace').checked){
+      const old = jobs.filter(j=>j.date>=r.firstDate && j.date<=r.lastDate);
+      if(live && old.length){
+        const sid = await resolveSite();
+        const batches = chunk(old.filter(j=>j._spItemId), 20);
+        for(let i=0;i<batches.length;i++){
+          setStatus(`Clearing old jobs… ${Math.min((i+1)*20,old.length)} / ${old.length}`, 6 + 20*(i+1)/batches.length);
+          const resp = await graphBatch(batches[i].map((j,k)=>({id:String(k), method:'DELETE', url:`/sites/${sid}/lists/${jobsListId}/items/${j._spItemId}`})));
+          if(Object.values(resp).some(x=>x.status===403)) throw new Error('View-only access: this account can read the board but not change it.');
+        }
+      }
+      const oldIds = new Set(old.map(j=>j.id));
+      jobs = jobs.filter(j=>!oldIds.has(j.id));
+    }
+    // 3) build the new jobs
+    const fresh = r.jobs.map(pj=>{
+      const drv = byCol[pj.driverCol];
+      return {id:'j'+(jobIdCounter++), date:pj.date, assignedDriverId: drv ? drv.id : null, order:pj.order||0,
+        type:pj.type||'normal', customer:pj.customer||'', origin:pj.origin||'', destination:pj.destination||'',
+        time:pj.time||'', timeIn:pj.timeIn||'', timeOut:pj.timeOut||'', loadType:pj.loadType||'', notes:pj.notes||'',
+        originFarm:'', destinationFarm:'', additionalStops:'', maintTime:'', technician:'', loadBoardRef:''};
+    });
+    // 4) save to SharePoint in batches of 20
+    if(live){
+      const sid = await resolveSite();
+      const batches = chunk(fresh, 20);
+      let failed = 0;
+      for(let i=0;i<batches.length;i++){
+        setStatus(`Saving to SharePoint… ${Math.min((i+1)*20,fresh.length).toLocaleString()} / ${fresh.length.toLocaleString()}`, 28 + 70*(i+1)/batches.length);
+        const resp = await graphBatch(batches[i].map((j,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:jobToFields(j)}})));
+        if(Object.values(resp).some(x=>x.status===403)) throw new Error('View-only access: this account can read the board but not change it.');
+        batches[i].forEach((j,k)=>{ const x = resp[String(k)]; if(x && x.status<300 && x.body && x.body.id){ j._spItemId = x.body.id; j.id = x.body.id; } else failed++; });
+      }
+      if(failed) showToast(`${failed} job(s) didn't save to SharePoint. Run the import again with "Replace" ticked to fill the gaps.`);
+    }
+    jobs.push(...fresh);
+    // jump to the right part of the chart
+    const today = fmtDate(new Date());
+    weekStart = mondayOf(dateFromStr(today >= r.firstDate && today <= r.lastDate ? today : r.firstDate));
+    saveAll(); render(); refreshPlaceList();
+    setStatus(`Done: ${fresh.filter(j=>j.type==='normal').length.toLocaleString()} jobs imported${live ? '' : ' (this browser only - sign in to save to SharePoint)'}.`, 100);
+    showToast(`Imported ${xlParsedSheet}: ${fresh.length.toLocaleString()} cards.`, 'ok');
+    importing = false; xlEl('xlCancelBtn').disabled = false;
+    setTimeout(closeImportModal, 1400);
+  }catch(err){
+    console.error('Import failed', err);
+    importing = false; xlEl('xlCancelBtn').disabled = false; xlEl('xlGoBtn').disabled = false;
+    if(/403/.test(String(err.message)) || /View-only/.test(String(err.message))) isViewOnly = true;
+    setStatus('Import stopped: ' + err.message, null);
+    status.style.color = '#a23b2e';
+  }
+});
+
+
+initAuth();
+</script>
+</body>
+</html>
