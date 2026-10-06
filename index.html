@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -812,6 +811,15 @@ function buildDriverChip(truck, dateStr, cellHasOff){
   chip.textContent = !name ? 'No driver' : (cellHasOff ? name + ' · off' : name);
   chip.title = usual && name!==usual ? `Usual driver: ${usual}` : 'Change driver';
   chip.addEventListener('click', (e)=>{ e.stopPropagation(); openDriverMenu(chip, truck, dateStr); });
+  if(name){
+    chip.draggable = true;
+    chip.title += ' · drag onto another truck to move or swap';
+    chip.addEventListener('dragstart', (e)=>{
+      e.dataTransfer.setData('application/x-driver', JSON.stringify({truckId:truck.id, date:dateStr}));
+      e.dataTransfer.effectAllowed = 'move';
+      closeDriverMenu();
+    });
+  }
   return chip;
 }
 let driverMenuEl = null;
@@ -847,6 +855,37 @@ function openDriverMenu(anchor, truck, dateStr){
       setAssignment(truck.id, dateStr, opt.dataset.n, kind);
     }
     closeDriverMenu();
+  });
+}
+// Drop a driver chip on another truck's cell: that driver moves there and the other truck's driver
+// (if any) takes the first truck - a swap. Same day only; you choose this-day-only or from-this-day-on.
+function attachDriverDrop(td, truck, dateStr){
+  td.addEventListener('dragover', (e)=>{ if(e.dataTransfer.types.includes('application/x-driver')){ e.preventDefault(); td.classList.add('dragover'); } });
+  td.addEventListener('dragleave', ()=>td.classList.remove('dragover'));
+  td.addEventListener('drop', (e)=>{
+    td.classList.remove('dragover');
+    const raw = e.dataTransfer.getData('application/x-driver'); if(!raw) return;
+    e.preventDefault();
+    const src = JSON.parse(raw);
+    if(src.truckId===truck.id) return;
+    if(src.date!==dateStr){ showToast('Drop the driver on another truck on the same day.'); return; }
+    const from = drivers.find(d=>d.id===src.truckId);
+    const mover = driverFor(src.truckId, dateStr), other = driverFor(truck.id, dateStr);
+    closeDriverMenu();
+    const m = document.createElement('div'); m.className = 'drv-menu';
+    m.innerHTML = `<div class="dm-title">${escapeHtml(mover)} → ${escapeHtml(truckDisplay(truck))}</div>` +
+      (other ? `<div style="padding:2px 8px 6px;font-size:11px;color:#5c5648;">${escapeHtml(other)} goes to ${escapeHtml(truckDisplay(from))}</div>` : `<div style="padding:2px 8px 6px;font-size:11px;color:#5c5648;">${escapeHtml(truckDisplay(from))} will have no driver</div>`) +
+      `<div class="dm-opt" data-k="day">This day only</div><div class="dm-opt" data-k="onward">This day onward</div><div class="dm-opt" data-k="">Cancel</div>`;
+    document.body.appendChild(m); driverMenuEl = m;
+    m.style.left = Math.min(e.clientX, window.innerWidth-230)+'px';
+    m.style.top = Math.min(e.clientY, window.innerHeight-m.offsetHeight-8)+'px';
+    m.addEventListener('click', (ev)=>{
+      const o = ev.target.closest('.dm-opt'); if(!o) return;
+      closeDriverMenu();
+      if(!o.dataset.k) return;
+      setAssignment(src.truckId, dateStr, other, o.dataset.k);
+      setAssignment(truck.id, dateStr, mover, o.dataset.k);
+    });
   });
 }
 function addRosterName(name, group){
@@ -1027,6 +1066,7 @@ function renderBoard(sortedDrivers){
       td.appendChild(addBtn);
 
       attachDropZone(td);
+      attachDriverDrop(td, drv, dateStr);
       tr.appendChild(td);
     });
 
@@ -2821,6 +2861,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       const oldIds = new Set(old.map(j=>j.id));
       jobs = jobs.filter(j=>!oldIds.has(j.id));
       assigns = assigns.filter(a=>!(a.date>=r.firstDate && a.date<=r.lastDate));
+      roster = roster.filter(x=>x._spItemId);   // drop names that only ever lived in this browser so they get saved properly
     }
     // 3) build the new jobs
     const fresh = r.jobs.map(pj=>{
