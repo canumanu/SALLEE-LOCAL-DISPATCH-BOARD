@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -392,6 +393,7 @@
   .job-driver{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#0f3a2c;color:#fff;border-radius:10px;padding:1px 4px 1px 8px;margin-bottom:4px;font-size:10px;font-weight:700;cursor:grab;}
   .job-driver .jd-x{cursor:pointer;opacity:.7;padding:0 3px;} .job-driver .jd-x:hover{opacity:1;}
   .job-card.drv-over{outline:2px solid #c9951a;outline-offset:1px;}
+  .drv-warn{background:#fbe3df;color:#a23b2e;border-radius:4px;padding:1px 5px;margin-bottom:4px;font-size:9.5px;font-weight:700;}
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%231b3a6b%22/%3E%3Cpath%20d%3D%22M8%2020h30v22H8z%22%20fill%3D%22%23f4efe0%22/%3E%3Cpath%20d%3D%22M38%2027h11l7%208v7H38z%22%20fill%3D%22%23e0b84a%22/%3E%3Cpath%20d%3D%22M42%2030h6l4%205h-10z%22%20fill%3D%22%231b3a6b%22/%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3C/svg%3E">
 </head>
@@ -760,6 +762,27 @@ function findTimeConflict(driverId, date, time, excludeIds){
   return jobs.find(j => j.assignedDriverId===driverId && j.date===date && j.time===time && !excludeIds.includes(j.id)) || null;
 }
 
+/* ---- time order inside a day, and driver double-booking ---- */
+function toMin(t){ const m = /^(\d{1,2}):(\d{2})/.exec(String(t||'')); return m ? (+m[1])*60 + (+m[2]) : null; }
+// a card sorts by its In time, else its load time; OFF cards first; untimed cards last (in their saved order)
+function jobSortKey(j){
+  if(j.type==='vacation') return -1;
+  const a = toMin(j.timeIn), b = toMin(j.time);
+  const k = (a!=null && b!=null) ? Math.min(a,b) : (a!=null ? a : b);
+  return k==null ? 99999 : k;
+}
+function cmpJobs(a,b){ const d = jobSortKey(a)-jobSortKey(b); return d || ((a.order||0)-(b.order||0)); }
+const DRIVER_OVERLAP_MIN = 60;   // two loads for one driver closer than this count as a double booking
+function findDriverConflict(name, date, time, excludeIds){
+  const t = toMin(time);
+  if(!name || t==null) return null;
+  return jobs.find(j=> !excludeIds.includes(j.id) && j.date===date && j.driver===name && j.type!=='vacation' && toMin(j.time)!=null && Math.abs(toMin(j.time)-t) < DRIVER_OVERLAP_MIN) || null;
+}
+function conflictText(name, c){
+  const tr = drivers.find(d=>d.id===c.assignedDriverId);
+  return `${name} is already on a job at ${formatTimeDisplay(c.time)} (${truckDisplay(tr)||'no truck'}: ${c.origin||'?'} \u2192 ${c.destination||'?'}).`;
+}
+
 /* Origins/destinations on the local board are free text with autocomplete (farms, tracks, clinics...).
    The OTR board's drive-time turnaround checks are switched off here: they only know track-to-track times. */
 function setLocationField(prefix, value){ document.getElementById('job'+prefix).value = value || ''; }
@@ -835,8 +858,10 @@ function attachDriverDrop(td, truck, dateStr){
     e.preventDefault();
     const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
     if(!list.length){ showToast('No jobs on this truck that day. Drop the name on a job card.'); return; }
-    setJobDriver(list, d.name);
-    showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok');
+    const go = ()=>{ setJobDriver(list, d.name); showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok'); };
+    const ids = list.map(j=>j.id);
+    let clash = null; for(const j of list){ clash = findDriverConflict(d.name, dateStr, j.time, ids); if(clash) break; }
+    if(clash) showConfirm(conflictText(d.name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
   });
 }
 
@@ -972,7 +997,7 @@ function renderBoard(sortedDrivers){
       td.dataset.driverId = drv.id;
 
       const cellJobs = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===drv.id)
-                            .sort((a,b)=>(a.order||0)-(b.order||0));
+                            .sort(cmpJobs);
       cellJobs.forEach(job=>td.appendChild(buildJobCard(job)));
 
       const addBtn = document.createElement('button');
@@ -1036,7 +1061,9 @@ function buildJobCard(job){
   }
   const custHtml = job.customer ? `<div class="cust">${escapeHtml(job.customer)}</div>` : '';
   const driverHtml = job.driver ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(job.driver)}</span><b class="jd-x" title="Clear driver">×</b></div>` : '';
-  body += driverHtml + custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
+  let warnHtml = '';
+  if(job.driver && job.type!=='vacation'){ const c = findDriverConflict(job.driver, job.date, job.time, [job.id]); if(c){ const tr = drivers.find(d=>d.id===c.assignedDriverId); warnHtml = `<div class="drv-warn" title="${escapeHtml(conflictText(job.driver, c))}">\u26a0 also on ${escapeHtml(truckDisplay(tr)||'another job')} at ${escapeHtml(formatTimeDisplay(c.time))}</div>`; } }
+  body += driverHtml + warnHtml + custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
   if(!body){ body = `<div class="meta">(click to edit)</div>`; }
   card.innerHTML = body;
 
@@ -1067,8 +1094,9 @@ function buildJobCard(job){
     e.preventDefault(); e.stopPropagation();
     if(job.type==='vacation' && !d.fromJob){ /* allow: marks whose OFF card it is */ }
     const src = d.fromJob && d.fromJob!==job.id && !e.altKey ? jobs.find(x=>x.id===d.fromJob) : null;
-    setJobDriver([job], d.name);
-    if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); }
+    const go = ()=>{ setJobDriver([job], d.name); if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); } };
+    const c = job.type!=='vacation' ? findDriverConflict(d.name, job.date, job.time, [job.id, d.fromJob||'']) : null;
+    if(c) showConfirm(conflictText(d.name, c) + ' Assign anyway?', go, 'Assign anyway'); else go();
   });
 
   const warning = getTurnaroundWarning(job);
@@ -1154,8 +1182,9 @@ function showToast(message, kind){
 }
 
 let confirmCallback = null;
-function showConfirm(message, onConfirm){
+function showConfirm(message, onConfirm, okLabel){
   document.getElementById('confirmMessage').textContent = message;
+  document.getElementById('confirmOkBtn').textContent = okLabel || 'Remove';
   confirmCallback = onConfirm;
   document.getElementById('confirmOverlay').classList.add('open');
 }
@@ -1511,6 +1540,10 @@ document.getElementById('jobSaveBtn').addEventListener('click', ()=>{
   };
   const selectedDriverId = document.getElementById('jobAssignDriver').value || null;
   let savedJobs = [];
+  if(data.driver && data.type!=='vacation'){
+    const dc = findDriverConflict(data.driver, editingJobId ? (jobs.find(j=>j.id===editingJobId)||{}).date : (document.getElementById('jobStartDate').value || pendingDate), data.time, editingJobId ? [editingJobId] : []);
+    if(dc){ showToast(conflictText(data.driver, dc) + ' Pick a different time or driver.'); return; }
+  }
 
   if(editingJobId){
     const job = jobs.find(j=>j.id===editingJobId);
@@ -1725,6 +1758,7 @@ const DRIVERS_COLUMNS = [
 const JOBS_COLUMNS = [
   {name:'JobDate', text:{}},
   {name:'DriverId', text:{}},
+  {name:'DriverName', text:{}},
   {name:'SortOrder', number:{decimalPlaces:'none'}},
   {name:'JobType', text:{}},
   {name:'MainTime', text:{}},
@@ -1911,6 +1945,23 @@ async function findOrCreateList(name, columns){
   });
   sessionStorage.setItem(cacheKey, created.id);
   return created.id;
+}
+
+// The lists may have been made by hand: add any column the board writes to that's missing (by internal name).
+async function ensureColumns(listId, columns, listName){
+  const key = 'sallee_cols_ok_' + listName;
+  if(sessionStorage.getItem(key)) return;
+  const sid = await resolveSite();
+  const have = await graphFetch(`/sites/${sid}/lists/${listId}/columns?$select=name,displayName&$top=200`);
+  const names = new Set((have.value||[]).map(c=>c.name));
+  const failed = [];
+  for(const col of columns){
+    if(names.has(col.name)) continue;
+    try{ await graphFetch(`/sites/${sid}/lists/${listId}/columns`, {method:'POST', body: JSON.stringify(col)}); console.info('Added missing column', col.name); }
+    catch(e){ console.error('Could not add column', col.name, e); failed.push(col.name); }
+  }
+  if(failed.length) throw new Error(`The ${listName} list is missing column(s): ${failed.join(', ')} - add them as "Single line of text" (exact spelling) or tell your admin.`);
+  sessionStorage.setItem(key, '1');
 }
 
 async function spListItems(listId, from, to, rawFilter){
@@ -2152,6 +2203,8 @@ async function startSyncedSession(){
   try{
     driversListId = await findOrCreateList(DRIVERS_LIST_NAME, DRIVERS_COLUMNS);
     jobsListId = await findOrCreateList(JOBS_LIST_NAME, JOBS_COLUMNS);
+    await ensureColumns(driversListId, DRIVERS_COLUMNS, DRIVERS_LIST_NAME);
+    await ensureColumns(jobsListId, JOBS_COLUMNS, JOBS_LIST_NAME);
     await pullFromSharePoint();
     syncEnabled = true; connectError = '';
     isViewOnly = false;
