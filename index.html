@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1801,6 +1800,8 @@ function updateAuthUI(signedIn){
     signOutBtn.style.display = '';
     badge.style.display = '';
     badge.textContent = currentAccount.name || currentAccount.username || 'Signed in';
+    badge.style.cursor = 'pointer'; badge.title = 'Click to hear the welcome again';
+    badge.onclick = ()=>maybeShowWelcome(true);
   } else {
     signInBtn.style.display = '';
     signOutBtn.style.display = 'none';
@@ -1817,8 +1818,9 @@ async function initAuth(){
     msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
     await msalInstance.initialize();
     const response = await msalInstance.handleRedirectPromise();
+    let freshSignIn = false;
     if(response && response.account){
-      currentAccount = response.account;
+      currentAccount = response.account; freshSignIn = true;
     } else {
       const accounts = msalInstance.getAllAccounts();
       if(accounts.length > 0) currentAccount = accounts[0];
@@ -1826,7 +1828,7 @@ async function initAuth(){
     if(currentAccount){
       msalInstance.setActiveAccount(currentAccount);
       updateAuthUI(true);
-      maybeShowWelcome();
+      maybeShowWelcome(freshSignIn);
       await startSyncedSession();
     } else {
       updateAuthUI(false);
@@ -1947,21 +1949,37 @@ async function findOrCreateList(name, columns){
   return created.id;
 }
 
-// The lists may have been made by hand: add any column the board writes to that's missing (by internal name).
+// Column name mapping: a hand-made list can hold our columns under a different internal name
+// (e.g. created from an Excel file). colMap[listId] = {ourName: theirInternalName}.
+const colMap = {};
+const normCol = x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function outFields(listId, fields){
+  const m = colMap[listId]; if(!m) return fields;
+  const o = {}; for(const k in fields) o[m[k]||k] = fields[k]; return o;
+}
+function inFields(listId, f){
+  const m = colMap[listId]; if(!m || !f) return f;
+  const inv = {}; for(const k in m) inv[m[k]] = k;
+  const o = {}; for(const k in f) o[inv[k]||k] = f[k];
+  if(typeof o.JobDate==='string' && /^\d{4}-\d{2}-\d{2}T/.test(o.JobDate)) o.JobDate = o.JobDate.slice(0,10);
+  return o;
+}
+function colName(listId, ours){ return (colMap[listId] && colMap[listId][ours]) || ours; }
+
+// The lists may have been made by hand: match our columns to theirs (internal name, then display name), add what's missing.
 async function ensureColumns(listId, columns, listName){
-  const key = 'sallee_cols_ok_' + listName;
-  if(sessionStorage.getItem(key)) return;
   const sid = await resolveSite();
-  const have = await graphFetch(`/sites/${sid}/lists/${listId}/columns?$select=name,displayName&$top=200`);
-  const names = new Set((have.value||[]).map(c=>c.name));
+  const have = await graphFetch(`/sites/${sid}/lists/${listId}/columns`);
+  const cols = have.value||[];
   const failed = [];
+  colMap[listId] = {};
   for(const col of columns){
-    if(names.has(col.name)) continue;
+    const hit = cols.find(c=>c.name===col.name) || cols.find(c=>normCol(c.name)===normCol(col.name) || normCol(c.displayName)===normCol(col.name));
+    if(hit){ colMap[listId][col.name] = hit.name; continue; }
     try{ await graphFetch(`/sites/${sid}/lists/${listId}/columns`, {method:'POST', body: JSON.stringify(col)}); console.info('Added missing column', col.name); }
     catch(e){ console.error('Could not add column', col.name, e); failed.push(col.name); }
   }
-  if(failed.length) throw new Error(`The ${listName} list is missing column(s): ${failed.join(', ')} - add them as "Single line of text" (exact spelling) or tell your admin.`);
-  sessionStorage.setItem(key, '1');
+  if(failed.length) throw new Error(`The ${listName} list is missing column(s): ${failed.join(', ')}. Columns found: ${cols.map(c=>c.name+(c.displayName&&c.displayName!==c.name?' ('+c.displayName+')':'')).join(', ')}`);
 }
 
 async function spListItems(listId, from, to, rawFilter){
@@ -1970,18 +1988,19 @@ async function spListItems(listId, from, to, rawFilter){
   let url = `/sites/${sid}/lists/${listId}/items?expand=fields&$top=500`;
   let opts;
   if(rawFilter){
-    url += `&$filter=${encodeURIComponent(rawFilter)}`;
+    url += `&$filter=${encodeURIComponent(rawFilter.replace(/fields\/JobType/g, 'fields/'+colName(listId,'JobType')))}`;
     opts = {headers:{'Prefer':'HonorNonIndexedQueriesWarningMayFailRandomly'}};
   } else if(from && to){
     // JobDate is stored as YYYY-MM-DD text, so a string range compares correctly.
-    url += `&$filter=${encodeURIComponent(`fields/JobDate ge '${from}' and fields/JobDate le '${to}'`)}`;
+    const jd = colName(listId,'JobDate');
+    url += `&$filter=${encodeURIComponent(`fields/${jd} ge '${from}' and fields/${jd} le '${to}'`)}`;
     // lets the query run even if JobDate isn't indexed yet (fine under 5,000 items; index it for speed)
     opts = {headers:{'Prefer':'HonorNonIndexedQueriesWarningMayFailRandomly'}};
   }
   try{
     while(url){
       const page = await graphFetch(url, opts);
-      results.push(...(page.value||[]));
+      results.push(...(page.value||[]).map(it=>({...it, fields: inFields(listId, it.fields)})));
       url = page['@odata.nextLink'] || null;
     }
     return results;
@@ -1990,7 +2009,7 @@ async function spListItems(listId, from, to, rawFilter){
     console.warn('Filtered read rejected, reading the whole list instead', err.message);
     const all = [];
     let u = `/sites/${sid}/lists/${listId}/items?expand=fields&$top=500`;
-    while(u){ const pg = await graphFetch(u); all.push(...(pg.value||[])); u = pg['@odata.nextLink'] || null; }
+    while(u){ const pg = await graphFetch(u); all.push(...(pg.value||[]).map(it=>({...it, fields: inFields(listId, it.fields)}))); u = pg['@odata.nextLink'] || null; }
     if(rawFilter){ const m = /JobType eq '(\w+)'/.exec(rawFilter); return all.filter(it=>(it.fields||{}).JobType===(m&&m[1])); }
     return all.filter(it=>{ const d=(it.fields||{}).JobDate||''; return d>=from && d<=to; });
   }
@@ -1999,14 +2018,14 @@ async function spCreateItem(listId, fields){
   const sid = await resolveSite();
   return graphFetch(`/sites/${sid}/lists/${listId}/items`, {
     method:'POST',
-    body: JSON.stringify({fields})
+    body: JSON.stringify({fields: outFields(listId, fields)})
   });
 }
 async function spUpdateItem(listId, itemId, fields){
   const sid = await resolveSite();
   return graphFetch(`/sites/${sid}/lists/${listId}/items/${itemId}/fields`, {
     method:'PATCH',
-    body: JSON.stringify(fields)
+    body: JSON.stringify(outFields(listId, fields))
   });
 }
 async function spDeleteItem(listId, itemId){
@@ -2595,12 +2614,12 @@ function firstNameFrom(acct){
   n = (n.split(/\s+/)[0] || '').trim();
   return n ? n.charAt(0).toUpperCase() + n.slice(1).toLowerCase() : 'Friend';
 }
-function maybeShowWelcome(){
+function maybeShowWelcome(force){
   if(!currentAccount) return;
   const key = 'sl_welcome_' + (currentAccount.username || 'user');
   const today = fmtDate(new Date());
   let seen = null; try{ seen = localStorage.getItem(key); }catch(e){}
-  if(seen === today) return;
+  if(seen === today && !force) return;   // a fresh Microsoft sign-in always greets; a reopened tab greets once a day
   showWelcome(firstNameFrom(currentAccount), ()=>{ try{ localStorage.setItem(key, today); }catch(e){} });
 }
 function startDrone(){
@@ -2836,7 +2855,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
     if(live && created.length){
       setStatus('Adding ' + created.length + ' new driver(s) to SharePoint…', 5);
       const sid = await resolveSite();
-      const resp = await graphBatch(created.map((d,i)=>({id:String(i), method:'POST', url:`/sites/${sid}/lists/${driversListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:driverToFields(d)}})));
+      const resp = await graphBatch(created.map((d,i)=>({id:String(i), method:'POST', url:`/sites/${sid}/lists/${driversListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:outFields(driversListId, driverToFields(d))}})));
       created.forEach((d,i)=>{ const x = resp[String(i)]; if(x && x.status<300 && x.body && x.body.id){ d._spItemId = x.body.id; d.id = x.body.id; } });
       if(created.some(d=>!d._spItemId)) throw new Error('Could not create some drivers on SharePoint (view-only access?).');
     }
@@ -2878,7 +2897,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       let failed = 0;
       for(let i=0;i<batches.length;i++){
         setStatus(`Saving to SharePoint… ${Math.min((i+1)*20,fresh.length).toLocaleString()} / ${fresh.length.toLocaleString()}`, 28 + 70*(i+1)/batches.length);
-        const resp = await graphBatch(batches[i].map((j,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:jobToFields(j)}})));
+        const resp = await graphBatch(batches[i].map((j,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:outFields(jobsListId, jobToFields(j))}})));
         if(Object.values(resp).some(x=>x.status===403)) throw new Error('View-only access: this account can read the board but not change it.');
         batches[i].forEach((j,k)=>{ const x = resp[String(k)]; if(x && x.status<300 && x.body && x.body.id){ j._spItemId = x.body.id; j.id = x.body.id; } else failed++; });
       }
@@ -2899,7 +2918,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
         const sid = await resolveSite();
         const reqs = newRoster.map(x=>({rec:x, fields:rosterToFields(x)}));
         for(const part of chunk(reqs,20)){
-          const resp = await graphBatch(part.map((q,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:q.fields}})));
+          const resp = await graphBatch(part.map((q,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:outFields(jobsListId, q.fields)}})));
           part.forEach((q,k)=>{ const x = resp[String(k)]; if(x && x.status<300 && x.body && x.body.id) q.rec._spItemId = x.body.id; });
         }
       }
