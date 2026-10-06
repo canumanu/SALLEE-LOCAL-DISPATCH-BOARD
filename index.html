@@ -384,6 +384,14 @@
   .drv-menu .dm-new{color:#0f3a2c;font-weight:700;}
   .drv-menu hr{border:0;border-top:1px solid #ddd;margin:6px 0;}
   .drv-menu label{display:block;padding:2px 8px;cursor:pointer;}
+  .pool{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .pool-hint{font-size:11px;color:#6b5b2a;margin-left:6px;}
+  .pool-chip{padding:2px 11px;border-radius:14px;border:1.5px solid #0f3a2c;background:#fff;font-weight:700;font-size:11.5px;cursor:grab;user-select:none;}
+  .pool-chip.busy{background:#e7f1ec;} .pool-chip.off{background:#fbe3df;border:1.5px dashed #a23b2e;color:#a23b2e;}
+  .pool-add{padding:2px 10px;border-radius:14px;border:1.5px dashed #0f3a2c;background:transparent;font-size:11.5px;cursor:pointer;}
+  .job-driver{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#0f3a2c;color:#fff;border-radius:10px;padding:1px 4px 1px 8px;margin-bottom:4px;font-size:10px;font-weight:700;cursor:grab;}
+  .job-driver .jd-x{cursor:pointer;opacity:.7;padding:0 3px;} .job-driver .jd-x:hover{opacity:1;}
+  .job-card.drv-over{outline:2px solid #c9951a;outline-offset:1px;}
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%231b3a6b%22/%3E%3Cpath%20d%3D%22M8%2020h30v22H8z%22%20fill%3D%22%23f4efe0%22/%3E%3Cpath%20d%3D%22M38%2027h11l7%208v7H38z%22%20fill%3D%22%23e0b84a%22/%3E%3Cpath%20d%3D%22M42%2030h6l4%205h-10z%22%20fill%3D%22%231b3a6b%22/%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3C/svg%3E">
 </head>
@@ -441,8 +449,10 @@
         <input id="jobTechnician" placeholder="e.g. John Reyes">
       </div>
     </div>
-    <label>Assign Driver</label>
+    <label>Truck</label>
     <select id="jobAssignDriver"></select>
+    <label>Driver</label>
+    <select id="jobDriverName"></select>
     <div id="repeatThroughRow" class="modal-row">
       <div>
         <label>Start Date</label>
@@ -684,7 +694,6 @@ const LS_ROSTER='sallee_local_roster_v2';
 let drivers = JSON.parse(localStorage.getItem(LS_DRIVERS) || 'null') || DEFAULT_DRIVERS;
 let jobs = JSON.parse(localStorage.getItem(LS_JOBS) || 'null') || [];
 let connectError = '';
-let assigns = JSON.parse(localStorage.getItem(LS_ASSIGN) || 'null') || [];   // who drives which truck: {id,truckId,date,driver,kind:'day'|'onward'}
 let roster = JSON.parse(localStorage.getItem(LS_ROSTER) || 'null') || [];     // driver names: {id,name,group}
 let jobIdCounter = jobs.reduce((m,j)=>Math.max(m, parseInt((j.id||'j0').replace('j',''))||0), 0) + 1;
 
@@ -702,7 +711,6 @@ weekStart = mondayOf(weekStart);
 function saveAll(){
   localStorage.setItem(LS_DRIVERS, JSON.stringify(drivers));
   localStorage.setItem(LS_JOBS, JSON.stringify(jobs));
-  localStorage.setItem(LS_ASSIGN, JSON.stringify(assigns));
   localStorage.setItem(LS_ROSTER, JSON.stringify(roster));
   localStorage.setItem(LS_WEEKSTART, weekStart.toISOString());
   if(!syncEnabled && !connectError){
@@ -760,166 +768,76 @@ function getTurnaroundWarning(job){ return {status:'none'}; }
 function formatMinutesDuration(mins){ if(mins < 60) return `${mins}m`; const h=Math.floor(mins/60), m=mins%60; return m?`${h}h ${m}m`:`${h}h`; }
 function absMinutesToDateTimeDisplay(absMin){ return new Date(absMin*60000).toLocaleString(); }
 
-/* ===== Trucks are the columns; the driver is a per-day chip =====
-   An assignment says "driver X is on truck T". kind 'onward' holds from its date until the next
-   onward record for that truck; kind 'day' overrides a single date. driver '' = nobody. */
-function driverFor(truckId, dateStr){
-  let day = null, onward = null;
-  for(const a of assigns){
-    if(a.truckId!==truckId) continue;
-    if(a.kind==='day' && a.date===dateStr) day = a;
-    else if(a.kind!=='day' && a.date<=dateStr && (!onward || a.date>=onward.date)) onward = a;
-  }
-  return (day||onward) ? (day||onward).driver : '';
-}
-function usualDriverFor(truckId){
-  let first = null;
-  for(const a of assigns){ if(a.truckId===truckId && a.kind!=='day' && (!first || a.date<first.date)) first = a; }
-  return first ? first.driver : '';
-}
+/* ===== Trucks are the columns; drivers are assigned per JOB =====
+   The driver list on top holds every driver. Drag a name onto a job card to put that driver on that job,
+   or onto a truck's day to put him on all of that day's jobs on that truck. A driver can be on jobs under
+   different trucks the same day; dropping never removes him from anywhere else. */
 function rosterNames(){
   const set = new Set(roster.map(r=>r.name));
-  assigns.forEach(a=>{ if(a.driver) set.add(a.driver); });
+  jobs.forEach(j=>{ if(j.driver) set.add(j.driver); });
   return [...set].sort((a,b)=>a.localeCompare(b));
 }
 function truckDisplay(t){ return t ? (t.name1||'Truck') : ''; }
-function assignToFields(a){
-  return {Title:`ASSIGN ${a.driver||'(none)'}`.slice(0,255), JobDate:a.date, DriverId:a.truckId, DriverName:'', SortOrder:0, JobType:'assign', Customer:a.driver||'', LoadType:a.kind||'onward'};
-}
 function rosterToFields(r){
   return {Title:`DRIVER ${r.name}`.slice(0,255), JobDate:'', DriverId:'', SortOrder:0, JobType:'roster', Customer:r.name, LoadType:r.group||''};
 }
 function strip(){
   const el = document.getElementById('todayStrip'); if(!el) return;
   const today = fmtDate(new Date());
-  const off = [], busy = new Set();
-  getSortedDrivers().forEach(t=>{
-    const name = driverFor(t.id, today);
-    const isOff = jobs.some(j=>j.date===today && j.assignedDriverId===t.id && j.type==='vacation');
-    if(name){ if(isOff) off.push(name); else busy.add(name); }
+  const off = new Set(), count = {};
+  jobs.forEach(j=>{
+    if(j.date!==today || !j.driver) return;
+    if(j.type==='vacation') off.add(j.driver); else count[j.driver] = (count[j.driver]||0) + 1;
   });
-  const offSet = new Set(off);
-  const free = rosterNames().filter(n=>!busy.has(n) && !offSet.has(n));
-  el.innerHTML = `<b>Today:</b> &nbsp;<b>Off</b> ${off.length? off.map(escapeHtml).join(', ') : '—'} &nbsp;·&nbsp; <b>Available to cover</b> ${free.length? free.map(escapeHtml).join(', ') : '—'}`;
-}
-function buildDriverChip(truck, dateStr, cellHasOff){
-  const name = driverFor(truck.id, dateStr);
-  const usual = usualDriverFor(truck.id);
-  const chip = document.createElement('button');
-  chip.type = 'button';
-  chip.className = 'drv-chip' + (!name ? ' none' : (cellHasOff ? ' none' : (usual && name!==usual ? ' chg' : '')));
-  chip.textContent = !name ? 'No driver' : (cellHasOff ? name + ' · off' : name);
-  chip.title = usual && name!==usual ? `Usual driver: ${usual}` : 'Change driver';
-  chip.addEventListener('click', (e)=>{ e.stopPropagation(); openDriverMenu(chip, truck, dateStr); });
-  if(name){
-    chip.draggable = true;
-    chip.title += ' · drag onto another truck to move or swap';
-    chip.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('application/x-driver', JSON.stringify({truckId:truck.id, date:dateStr}));
-      e.dataTransfer.effectAllowed = 'move';
-      closeDriverMenu();
-    });
-  }
-  return chip;
-}
-let driverMenuEl = null;
-function closeDriverMenu(){ if(driverMenuEl){ driverMenuEl.remove(); driverMenuEl=null; } }
-document.addEventListener('click', (e)=>{ if(driverMenuEl && !driverMenuEl.contains(e.target)) closeDriverMenu(); });
-function openDriverMenu(anchor, truck, dateStr){
-  closeDriverMenu();
-  const cur = driverFor(truck.id, dateStr);
-  const usual = usualDriverFor(truck.id);
-  const names = rosterNames();
-  const m = document.createElement('div'); m.className = 'drv-menu';
-  const dl = dateFromStr(dateStr).toLocaleDateString('en-US',{weekday:'short',month:'numeric',day:'numeric'});
-  m.innerHTML = `<div class="dm-title">${escapeHtml(truckDisplay(truck))} · ${dl}</div>` +
-    names.map(n=>`<div class="dm-opt${n===cur?' sel':''}" data-n="${escapeHtml(n)}">${escapeHtml(n)}${n===cur?' ✓':''}${n===usual?' <small>(usual)</small>':''}</div>`).join('') +
-    `<div class="dm-opt${!cur?' sel':''}" data-n="">— No driver —</div>` +
-    `<div class="dm-opt dm-new">+ New driver…</div><hr>` +
-    `<label><input type="radio" name="dmKind" value="day" checked> This day only</label>` +
-    `<label><input type="radio" name="dmKind" value="onward"> This day onward</label>`;
-  document.body.appendChild(m); driverMenuEl = m;
-  const r = anchor.getBoundingClientRect();
-  m.style.left = Math.min(r.left, window.innerWidth-230) + 'px';
-  m.style.top = Math.min(r.bottom+4, window.innerHeight-m.offsetHeight-8) + 'px';
-  m.addEventListener('click', (e)=>{
-    const opt = e.target.closest('.dm-opt'); if(!opt) return;
-    const kind = m.querySelector('input[name=dmKind]:checked').value;
-    if(opt.classList.contains('dm-new')){
-      const nm = (prompt('New driver name:')||'').trim();
-      if(!nm) return;
-      const truckGroup = truck.location==='AGENT'||truck.location==='PT' ? truck.location : 'LOCAL';
-      addRosterName(nm, truckGroup);
-      setAssignment(truck.id, dateStr, nm, kind);
-    } else {
-      setAssignment(truck.id, dateStr, opt.dataset.n, kind);
-    }
-    closeDriverMenu();
+  el.innerHTML = '<b>Drivers</b> <span class="pool-hint">drag a name onto a job (or onto a truck\'s day)</span>' +
+    '<div class="pool">' + rosterNames().map(n=>{
+      const isOff = off.has(n), c = count[n]||0;
+      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}</span>`;
+    }).join('') + '<button class="pool-add" id="poolAdd" title="Add a driver">+ driver</button></div>';
+  el.querySelectorAll('.pool-chip').forEach(ch=>{
+    ch.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('application/x-driver', JSON.stringify({name:ch.dataset.n})); e.dataTransfer.effectAllowed='copy'; });
   });
-}
-// Drop a driver chip on another truck's cell: that driver moves there and the other truck's driver
-// (if any) takes the first truck - a swap. Same day only; you choose this-day-only or from-this-day-on.
-function attachDriverDrop(td, truck, dateStr){
-  td.addEventListener('dragover', (e)=>{ if(e.dataTransfer.types.includes('application/x-driver')){ e.preventDefault(); td.classList.add('dragover'); } });
-  td.addEventListener('dragleave', ()=>td.classList.remove('dragover'));
-  td.addEventListener('drop', (e)=>{
-    td.classList.remove('dragover');
-    const raw = e.dataTransfer.getData('application/x-driver'); if(!raw) return;
-    e.preventDefault();
-    const src = JSON.parse(raw);
-    if(src.truckId===truck.id) return;
-    if(src.date!==dateStr){ showToast('Drop the driver on another truck on the same day.'); return; }
-    const from = drivers.find(d=>d.id===src.truckId);
-    const mover = driverFor(src.truckId, dateStr), other = driverFor(truck.id, dateStr);
-    closeDriverMenu();
-    const m = document.createElement('div'); m.className = 'drv-menu';
-    m.innerHTML = `<div class="dm-title">${escapeHtml(mover)} → ${escapeHtml(truckDisplay(truck))}</div>` +
-      (other ? `<div style="padding:2px 8px 6px;font-size:11px;color:#5c5648;">${escapeHtml(other)} goes to ${escapeHtml(truckDisplay(from))}</div>` : `<div style="padding:2px 8px 6px;font-size:11px;color:#5c5648;">${escapeHtml(truckDisplay(from))} will have no driver</div>`) +
-      `<div class="dm-opt" data-k="day">This day only</div><div class="dm-opt" data-k="onward">This day onward</div><div class="dm-opt" data-k="">Cancel</div>`;
-    document.body.appendChild(m); driverMenuEl = m;
-    m.style.left = Math.min(e.clientX, window.innerWidth-230)+'px';
-    m.style.top = Math.min(e.clientY, window.innerHeight-m.offsetHeight-8)+'px';
-    m.addEventListener('click', (ev)=>{
-      const o = ev.target.closest('.dm-opt'); if(!o) return;
-      closeDriverMenu();
-      if(!o.dataset.k) return;
-      setAssignment(src.truckId, dateStr, other, o.dataset.k);
-      setAssignment(truck.id, dateStr, mover, o.dataset.k);
-    });
+  document.getElementById('poolAdd').addEventListener('click', ()=>{
+    const nm = (prompt('New driver name:')||'').trim(); if(!nm) return;
+    addRosterName(nm, 'LOCAL'); render();
   });
 }
 function addRosterName(name, group){
   if(roster.some(r=>r.name.toLowerCase()===name.toLowerCase())) return null;
   const r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:group||'LOCAL'};
-  roster.push(r); syncRecordUpsert(r, rosterToFields(r), 'roster'); return r;
+  roster.push(r); saveAll(); syncRecordUpsert(r, rosterToFields(r)); return r;
 }
-function setAssignment(truckId, dateStr, driver, kind){
-  if(isViewOnly){ showToast("You have view-only access to this board, so this change isn't saved to SharePoint."); }
-  const touched = [];
-  // same truck+date+kind replaces; an 'onward' at that date also replaces
-  let rec = assigns.find(a=>a.truckId===truckId && a.date===dateStr && (a.kind==='day') === (kind==='day'));
-  if(rec){ rec.driver = driver; }
-  else { rec = {id:'a'+Date.now()+Math.random().toString(36).slice(2,5), truckId, date:dateStr, driver, kind}; assigns.push(rec); }
-  touched.push(rec);
-  // an 'onward' change also clears a stale single-day override on that same date
-  if(kind==='onward'){
-    assigns.filter(a=>a.truckId===truckId && a.date===dateStr && a.kind==='day').forEach(a=>{ syncAssignDelete(a); });
-    assigns = assigns.filter(a=>!(a.truckId===truckId && a.date===dateStr && a.kind==='day'));
-  }
-  saveAll(); render();
-  syncRecordUpsert(rec, assignToFields(rec), 'assign');
-}
-async function syncRecordUpsert(rec, fields, what){
+async function syncRecordUpsert(rec, fields){
   if(!syncEnabled) return;
   try{
     if(rec._spItemId) await spUpdateItem(jobsListId, rec._spItemId, fields);
     else { const c = await spCreateItem(jobsListId, fields); rec._spItemId = c.id; saveAll(); }
     updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
-  }catch(err){ handleSyncError(err, 'save the driver change'); }
+  }catch(err){ handleSyncError(err, 'save the driver'); }
 }
-async function syncAssignDelete(rec){
-  if(!syncEnabled || !rec._spItemId) return;
-  try{ await spDeleteItem(jobsListId, rec._spItemId); }catch(err){ handleSyncError(err, 'save the driver change'); }
+function setJobDriver(jobList, name){
+  if(!jobList.length) return;
+  jobList.forEach(j=>{ j.driver = name; });
+  saveAll(); render(); syncJobsUpsert(jobList);
+}
+function readDriverDrop(e){
+  const raw = e.dataTransfer.getData('application/x-driver');
+  if(!raw) return null;
+  try{ return JSON.parse(raw); }catch(_){ return null; }
+}
+// dropping on a truck's day assigns the driver to every working job in that cell
+function attachDriverDrop(td, truck, dateStr){
+  td.addEventListener('dragover', (e)=>{ if(e.dataTransfer.types.includes('application/x-driver')){ e.preventDefault(); td.classList.add('dragover'); } });
+  td.addEventListener('dragleave', ()=>td.classList.remove('dragover'));
+  td.addEventListener('drop', (e)=>{
+    td.classList.remove('dragover');
+    const d = readDriverDrop(e); if(!d) return;
+    e.preventDefault();
+    const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
+    if(!list.length){ showToast('No jobs on this truck that day. Drop the name on a job card.'); return; }
+    setJobDriver(list, d.name);
+    showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok');
+  });
 }
 
 function getSortedDrivers(){
@@ -1055,7 +973,6 @@ function renderBoard(sortedDrivers){
 
       const cellJobs = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===drv.id)
                             .sort((a,b)=>(a.order||0)-(b.order||0));
-      td.appendChild(buildDriverChip(drv, dateStr, cellJobs.some(j=>j.type==='vacation')));
       cellJobs.forEach(job=>td.appendChild(buildJobCard(job)));
 
       const addBtn = document.createElement('button');
@@ -1118,7 +1035,8 @@ function buildJobCard(job){
     if(bits.length) body += `<div class="maint-detail">${escapeHtml(bits.join(' · '))}</div>`;
   }
   const custHtml = job.customer ? `<div class="cust">${escapeHtml(job.customer)}</div>` : '';
-  body += custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
+  const driverHtml = job.driver ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(job.driver)}</span><b class="jd-x" title="Clear driver">×</b></div>` : '';
+  body += driverHtml + custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
   if(!body){ body = `<div class="meta">(click to edit)</div>`; }
   card.innerHTML = body;
 
@@ -1135,6 +1053,23 @@ function buildJobCard(job){
     setTimeout(()=>card.classList.add('dragging'), 0);
   });
   card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+  // driver label: clear it, or drag it to another job to move it
+  const jd = card.querySelector('.job-driver');
+  if(jd){
+    jd.querySelector('.jd-x').addEventListener('click', (e)=>{ e.stopPropagation(); setJobDriver([job], ''); });
+    jd.addEventListener('dragstart', (e)=>{ e.stopPropagation(); e.dataTransfer.setData('application/x-driver', JSON.stringify({name:job.driver, fromJob:job.id})); e.dataTransfer.effectAllowed='copyMove'; });
+  }
+  card.addEventListener('dragover', (e)=>{ if(e.dataTransfer.types.includes('application/x-driver')){ e.preventDefault(); e.stopPropagation(); card.classList.add('drv-over'); } });
+  card.addEventListener('dragleave', ()=>card.classList.remove('drv-over'));
+  card.addEventListener('drop', (e)=>{
+    card.classList.remove('drv-over');
+    const d = readDriverDrop(e); if(!d) return;
+    e.preventDefault(); e.stopPropagation();
+    if(job.type==='vacation' && !d.fromJob){ /* allow: marks whose OFF card it is */ }
+    const src = d.fromJob && d.fromJob!==job.id && !e.altKey ? jobs.find(x=>x.id===d.fromJob) : null;
+    setJobDriver([job], d.name);
+    if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); }
+  });
 
   const warning = getTurnaroundWarning(job);
   if(warning.status === 'ok'){
@@ -1407,6 +1342,8 @@ function populateDriverSelect(selectedId){ /* trucks */
   sel.innerHTML = '<option value="">— Unassigned —</option>' +
     getSortedDrivers().map(d=>`<option value="${d.id}">${escapeHtml(driverLabel(d))}${d.location? ' ['+d.location+']':''}</option>`).join('');
   sel.value = selectedId || '';
+  const dsel = document.getElementById('jobDriverName');
+  dsel.innerHTML = '<option value="">— No driver —</option>' + rosterNames().map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
 }
 
 function openJobModal(jobId, date, driverId){
@@ -1424,6 +1361,7 @@ function openJobModal(jobId, date, driverId){
     document.getElementById('jobTechnician').value = job.technician||'';
     updateTechnicianRowVisibility();
     populateDriverSelect(job.assignedDriverId);
+    document.getElementById('jobDriverName').value = job.driver||'';
     document.getElementById('jobCustomer').value = job.customer||'';
     setLocationField('Origin', job.origin);
     document.getElementById('jobOriginFarm').value = job.originFarm||'';
@@ -1448,6 +1386,7 @@ function openJobModal(jobId, date, driverId){
     document.getElementById('jobTechnician').value='';
     updateTechnicianRowVisibility();
     populateDriverSelect(driverId);
+    document.getElementById('jobDriverName').value = '';
     document.getElementById('jobCustomer').value='';
     setLocationField('Origin', '');
     document.getElementById('jobOriginFarm').value='';
@@ -1568,6 +1507,7 @@ document.getElementById('jobSaveBtn').addEventListener('click', ()=>{
     loadType: document.getElementById('jobLoadType').value,
     loadBoardRef: document.getElementById('jobLoadBoardRef').value.trim(),
     notes: document.getElementById('jobNotes').value.trim(),
+    driver: document.getElementById('jobDriverName').value,
   };
   const selectedDriverId = document.getElementById('jobAssignDriver').value || null;
   let savedJobs = [];
@@ -1719,7 +1659,7 @@ document.getElementById('nextBtn').addEventListener('click', ()=>{ weekStart.set
 document.getElementById('todayBtn').addEventListener('click', ()=>{ weekStart = mondayOf(new Date()); saveAll(); render(); pullSoon(); });
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
-  const data = {trucks:drivers, assigns, roster, jobs, weekStart: weekStart.toISOString()};
+  const data = {trucks:drivers, roster, jobs, weekStart: weekStart.toISOString()};
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2065,7 +2005,7 @@ function jobToFields(job){
     Title: `${job.origin||'?'} -> ${job.destination||'?'}`.slice(0,255),
     JobDate: job.date||'',
     DriverId: job.assignedDriverId||'',
-    DriverName: driverNameForSync(job.assignedDriverId),
+    DriverName: job.driver||'',
     SortOrder: job.order||0,
     JobType: job.type||'normal',
     MainTime: job.maintTime||'',
@@ -2090,6 +2030,7 @@ function fieldsToJob(item){
     id: item.id,
     date: f.JobDate||'',
     assignedDriverId: f.DriverId||null,
+    driver: f.DriverName||'',
     order: Number(f.SortOrder)||0,
     type: f.JobType||'normal',
     maintTime: f.MainTime||'',
@@ -2142,16 +2083,13 @@ async function pullFromSharePoint(){
 }
 async function pullFromSharePointInner(){
   const win = loadWindow();
-  const [driverItems, jobItemsRaw, assignItems, rosterItems] = await Promise.all([
+  const [driverItems, jobItemsRaw, rosterItems] = await Promise.all([
     spListItems(driversListId),
     spListItems(jobsListId, win.from, win.to),
-    spListItems(jobsListId, null, null, "fields/JobType eq 'assign'"),
     spListItems(jobsListId, null, null, "fields/JobType eq 'roster'")
   ]);
   const jobItems = jobItemsRaw.filter(it=>{ const t=(it.fields||{}).JobType; return t!=='assign' && t!=='roster'; });
   {
-    const keepA = assigns.filter(a=>!a._spItemId);
-    assigns = assignItems.map(it=>{ const f=it.fields||{}; return {id:'s'+it.id, _spItemId:it.id, truckId:f.DriverId||'', date:f.JobDate||'', driver:f.Customer||'', kind:f.LoadType||'onward'}; }).concat(keepA);
     const keepR = roster.filter(r=>!r._spItemId);
     roster = rosterItems.map(it=>{ const f=it.fields||{}; return {id:'s'+it.id, _spItemId:it.id, name:f.Customer||'', group:f.LoadType||''}; }).filter(r=>r.name).concat(keepR);
   }
@@ -2860,7 +2798,6 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       }
       const oldIds = new Set(old.map(j=>j.id));
       jobs = jobs.filter(j=>!oldIds.has(j.id));
-      assigns = assigns.filter(a=>!(a.date>=r.firstDate && a.date<=r.lastDate));
       roster = roster.filter(x=>x._spItemId);   // drop names that only ever lived in this browser so they get saved properly
     }
     // 3) build the new jobs
@@ -2869,7 +2806,8 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       return {id:'j'+(jobIdCounter++), date:pj.date, assignedDriverId: drv ? drv.id : null, order:pj.order||0,
         type:pj.type||'normal', customer:pj.customer||'', origin:pj.origin||'', destination:pj.destination||'',
         time:pj.time||'', timeIn:pj.timeIn||'', timeOut:pj.timeOut||'', loadType:pj.loadType||'', notes:pj.notes||'',
-        originFarm:'', destinationFarm:'', additionalStops:'', maintTime:'', technician:'', loadBoardRef:''};
+        originFarm:'', destinationFarm:'', additionalStops:'', maintTime:'', technician:'', loadBoardRef:'',
+        driver: ((pj.type||'normal')==='normal' || pj.type==='vacation') && colDriver[pj.driverCol] ? colDriver[pj.driverCol].person : ''};
     });
     // 4) save to SharePoint in batches of 20
     if(live){
@@ -2887,24 +2825,23 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
     jobs.push(...fresh);
     // 5) drivers + who sits in which truck from the first day of the chart
     {
-      const newAssigns = [], newRoster = [];
+      const newRoster = [];
       r.drivers.forEach(d=>{
         const cd = colDriver[d.col], truck = byCol[d.col];
         if(!cd || !truck) return;
         if(cd.person && !roster.some(x=>x.name.toLowerCase()===cd.person.toLowerCase()) && !newRoster.some(x=>x.name.toLowerCase()===cd.person.toLowerCase()))
           newRoster.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name:cd.person, group:cd.group||'LOCAL'});
-        newAssigns.push({id:'a'+Date.now()+Math.random().toString(36).slice(2,5), truckId:truck.id, date:r.firstDate, driver:cd.person, kind:'onward'});
       });
       if(live){
         setStatus('Saving drivers…', 99);
         const sid = await resolveSite();
-        const reqs = newRoster.map(x=>({rec:x, fields:rosterToFields(x)})).concat(newAssigns.map(x=>({rec:x, fields:assignToFields(x)})));
+        const reqs = newRoster.map(x=>({rec:x, fields:rosterToFields(x)}));
         for(const part of chunk(reqs,20)){
           const resp = await graphBatch(part.map((q,k)=>({id:String(k), method:'POST', url:`/sites/${sid}/lists/${jobsListId}/items`, headers:{'Content-Type':'application/json'}, body:{fields:q.fields}})));
           part.forEach((q,k)=>{ const x = resp[String(k)]; if(x && x.status<300 && x.body && x.body.id) q.rec._spItemId = x.body.id; });
         }
       }
-      roster.push(...newRoster); assigns.push(...newAssigns);
+      roster.push(...newRoster);
     }
     // jump to the right part of the chart
     const today = fmtDate(new Date());
