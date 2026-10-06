@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e3b2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Local Dispatch">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Sallee Local Dispatch Board</title>
 <style>
   :root{
@@ -394,6 +401,28 @@
   .job-card.drv-over{outline:2px solid #c9951a;outline-offset:1px;}
   .drv-warn{background:#fbe3df;color:#a23b2e;border-radius:4px;padding:1px 5px;margin-bottom:4px;font-size:9.5px;font-weight:700;}
   .pool-chip .pc-x{margin-left:6px;opacity:0;cursor:pointer;color:#a23b2e;transition:opacity .12s;} .pool-chip:hover .pc-x{opacity:.85;} .pool-chip .pc-x:hover{opacity:1;}
+  .pool-chip.sel{background:#c9951a;color:#fff;border-color:#c9951a;}
+  body.picking .job-card{outline:1.5px dashed #c9951a;outline-offset:1px;}
+  body.picking td.job-cell{cursor:copy;}
+  .pool-chip{touch-action:manipulation;}
+  @media (max-width:760px){
+    .topbar{padding:max(8px,env(safe-area-inset-top)) 10px 8px;gap:8px;}
+    .topbar h1{font-size:14px;}
+    .brand-truck{width:20px;height:20px;}
+    .nav-group{width:100%;justify-content:space-between;gap:6px;}
+    .range-label{min-width:0;flex:1;font-size:12px;}
+    .btn{padding:6px 9px;font-size:12px;}
+    #exportBtn,#authUserBadge{display:none !important;}
+    .status-note{font-size:10px;flex:1 1 100%;}
+    .today-strip{padding:6px 10px;}
+    .pool{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+    .pool-chip{white-space:nowrap;padding:5px 12px;font-size:13px;}
+    th.driver-head,td.job-cell{min-width:168px;width:168px;}
+    .job-card{font-size:11px;}
+    .drv-menu{width:min(260px,90vw);}
+    .toast{top:auto !important;bottom:calc(14px + env(safe-area-inset-bottom)) !important;max-width:92vw;font-size:13px;padding:10px 14px;}
+  }
+  @supports (padding:max(0px)){ body{padding-bottom:env(safe-area-inset-bottom);} }
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%231b3a6b%22/%3E%3Cpath%20d%3D%22M8%2020h30v22H8z%22%20fill%3D%22%23f4efe0%22/%3E%3Cpath%20d%3D%22M38%2027h11l7%208v7H38z%22%20fill%3D%22%23e0b84a%22/%3E%3Cpath%20d%3D%22M42%2030h6l4%205h-10z%22%20fill%3D%22%231b3a6b%22/%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3C/svg%3E">
 </head>
@@ -708,7 +737,7 @@ function mondayOf(d){
   return dt;
 }
 let weekStart = new Date(localStorage.getItem(LS_WEEKSTART) || mondayOf(new Date()).toISOString());
-weekStart = mondayOf(weekStart);
+weekStart = isCompact() ? startOfDay(new Date()) : mondayOf(weekStart);
 
 function saveAll(){
   localStorage.setItem(LS_DRIVERS, JSON.stringify(drivers));
@@ -724,9 +753,12 @@ function fmtDate(d){
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
 }
+function isCompact(){ return window.matchMedia('(max-width: 760px)').matches; }
+function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
 function getDateRange(){
   const arr=[];
-  for(let i=0;i<14;i++){
+  const n = isCompact() ? 1 : 14;
+  for(let i=0;i<n;i++){
     const d = new Date(weekStart);
     d.setDate(d.getDate()+i);
     arr.push(d);
@@ -820,14 +852,15 @@ function strip(){
     if(j.date!==today || !j.driver) return;
     if(j.type==='vacation') off.add(j.driver); else count[j.driver] = (count[j.driver]||0) + 1;
   });
-  el.innerHTML = '<b>Drivers</b> <span class="pool-hint">drag a name onto a job (or onto a truck\'s day)</span>' +
+  el.innerHTML = '<b>Drivers</b> <span class="pool-hint">' + (pickedDriver ? 'tap a job to give it to '+escapeHtml(pickedDriver)+' (tap the name again to put it down)' : 'drag a name onto a job, or tap a name then tap a job') + '</span>' +
     '<div class="pool">' + rosterNames().map(n=>{
       const isOff = off.has(n), c = count[n]||0;
-      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}<b class="pc-x" title="Remove from the list">×</b></span>`;
+      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}${pickedDriver===n?' sel':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}<b class="pc-x" title="Remove from the list">×</b></span>`;
     }).join('') + '<button class="pool-add" id="poolAdd" title="Add a driver">+ driver</button></div>';
   el.querySelectorAll('.pool-chip').forEach(ch=>{
     ch.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('application/x-driver', JSON.stringify({name:ch.dataset.n})); e.dataTransfer.effectAllowed='copy'; });
   });
+  el.querySelectorAll('.pool-chip').forEach(ch=>ch.addEventListener('click', (e)=>{ if(e.target.closest('.pc-x')) return; pickDriver(ch.dataset.n); }));
   el.querySelectorAll('.pc-x').forEach(x=>x.addEventListener('click', (e)=>{
     e.stopPropagation();
     const nm = x.closest('.pool-chip').dataset.n;
@@ -856,6 +889,27 @@ function setJobDriver(jobList, name){
   if(!jobList.length) return;
   jobList.forEach(j=>{ j.driver = name; });
   saveAll(); render(); syncJobsUpsert(jobList);
+}
+let pickedDriver = null;   // tap a name in the list to pick it up, then tap job cards (or a truck's empty day space)
+function pickDriver(name){
+  pickedDriver = (pickedDriver===name) ? null : name;
+  document.body.classList.toggle('picking', !!pickedDriver);
+  strip();
+  if(pickedDriver) showToast(`${pickedDriver} picked up. Tap jobs to assign.`, 'ok');
+}
+function assignToJobChecked(job, name, fromJobId, copy){
+  const src = fromJobId && fromJobId!==job.id && !copy ? jobs.find(x=>x.id===fromJobId) : null;
+  const go = ()=>{ setJobDriver([job], name); if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); } };
+  const c = job.type!=='vacation' ? findDriverConflict(name, job.date, job.time, [job.id, fromJobId||'']) : null;
+  if(c) showConfirm(conflictText(name, c) + ' Assign anyway?', go, 'Assign anyway'); else go();
+}
+function assignToCellChecked(truck, dateStr, name){
+  const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
+  if(!list.length){ showToast('No jobs on this truck that day. Tap a job card instead.'); return; }
+  const go = ()=>{ setJobDriver(list, name); showToast(`${name} \u2192 ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok'); };
+  const ids = list.map(j=>j.id);
+  let clash = null; for(const j of list){ clash = findDriverConflict(name, dateStr, j.time, ids); if(clash) break; }
+  if(clash) showConfirm(conflictText(name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
 }
 function readDriverDrop(e){
   const raw = e.dataTransfer.getData('application/x-driver');
@@ -909,6 +963,19 @@ function render(){
   syncScrollWidth();
 }
 
+function applyNavLabels(){
+  const c = isCompact();
+  document.getElementById('prevBtn').innerHTML = c ? '&larr; Day' : '&larr; Prev 2 Wks';
+  document.getElementById('nextBtn').innerHTML = c ? 'Day &rarr;' : 'Next 2 Wks &rarr;';
+  document.getElementById('todayBtn').textContent = c ? 'Today' : 'This Week';
+}
+let lastCompact = null;
+window.addEventListener('resize', ()=>{
+  const c = isCompact();
+  if(c===lastCompact) return;
+  lastCompact = c; weekStart = c ? startOfDay(new Date()) : mondayOf(weekStart);
+  applyNavLabels(); render(); pullSoon();
+});
 function syncScrollWidth(){
   const table = document.getElementById('boardTable');
   document.getElementById('topScrollSyncInner').style.width = table.scrollWidth + 'px';
@@ -936,7 +1003,7 @@ function renderRangeLabel(){
   const dates = getDateRange();
   const opts = {month:'short', day:'numeric'};
   document.getElementById('rangeLabel').textContent =
-    `${dates[0].toLocaleDateString('en-US',opts)} – ${dates[13].toLocaleDateString('en-US',opts)}, ${dates[13].getFullYear()}`;
+    `${dates.length===1 ? dates[0].toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) : dates[0].toLocaleDateString('en-US',opts)+' – '+dates[dates.length-1].toLocaleDateString('en-US',opts)+', '+dates[dates.length-1].getFullYear()}`;
 }
 
 function renderRegionRow(sortedDrivers){
@@ -1023,6 +1090,7 @@ function renderBoard(sortedDrivers){
 
       attachDropZone(td);
       attachDriverDrop(td, drv, dateStr);
+      td.addEventListener('click', (e)=>{ if(pickedDriver && e.target===td) assignToCellChecked(drv, dateStr, pickedDriver); });
       tr.appendChild(td);
     });
 
@@ -1086,6 +1154,7 @@ function buildJobCard(job){
     if(orderBadge){ showOrderDetail(orderBadge.dataset.orderId); return; }
     if(e.target.closest('.lb-ref')) return;
     if(e.target.closest('.turnaround-warning')) return;
+    if(pickedDriver){ if(!e.target.closest('.jd-x')) assignToJobChecked(job, pickedDriver, null, true); return; }
     openJobModal(job.id);
   });
   card.addEventListener('dragstart', (e)=>{
@@ -1701,9 +1770,9 @@ document.getElementById('drvDeleteBtn').addEventListener('click', ()=>{
   });
 });
 
-document.getElementById('prevBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()-14); saveAll(); render(); pullSoon(); });
-document.getElementById('nextBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()+14); saveAll(); render(); pullSoon(); });
-document.getElementById('todayBtn').addEventListener('click', ()=>{ weekStart = mondayOf(new Date()); saveAll(); render(); pullSoon(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()-(isCompact()?1:14)); saveAll(); render(); pullSoon(); });
+document.getElementById('nextBtn').addEventListener('click', ()=>{ weekStart.setDate(weekStart.getDate()+(isCompact()?1:14)); saveAll(); render(); pullSoon(); });
+document.getElementById('todayBtn').addEventListener('click', ()=>{ weekStart = isCompact() ? startOfDay(new Date()) : mondayOf(new Date()); saveAll(); render(); pullSoon(); });
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   const data = {trucks:drivers, roster, jobs, weekStart: weekStart.toISOString()};
@@ -1875,6 +1944,8 @@ function signOut(){
   try{ sessionStorage.clear(); localStorage.setItem('sl_signed_out','1'); }catch(e){}
   location.reload();
 }
+applyNavLabels(); lastCompact = isCompact();
+if('serviceWorker' in navigator && /^https:|localhost/.test(location.protocol+location.hostname)){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }
 document.getElementById('signInBtn').addEventListener('click', signIn);
 document.getElementById('signOutBtn').addEventListener('click', signOut);
 
