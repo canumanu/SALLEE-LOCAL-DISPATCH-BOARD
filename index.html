@@ -2171,8 +2171,11 @@ function handleSyncError(err, actionDesc){
     updateSyncStatus('View-only access — changes are not saved to SharePoint', true);
     showToast("You have view-only access to this board, so this change wasn't saved to SharePoint (it's kept only on this device). Ask your dispatch admin for edit access if you need to make changes.");
   } else {
-    updateSyncStatus('Sync error — change saved locally only', true);
-    showToast(`Couldn't ${actionDesc} to SharePoint (offline or connection issue). It's saved on this device and will sync once reconnected.`);
+    let why = String((err && err.message) || err || '');
+    try{ const j = JSON.parse(why.slice(why.indexOf('{'))); why = (err.status?err.status+' ':'') + ((j.error && (j.error.code+': '+j.error.message)) || why); }catch(_){}
+    why = why.replace(/\s+/g,' ').slice(0,180);
+    updateSyncStatus('Sync error (' + why + ') — change saved locally only', true);
+    showToast(`Couldn't ${actionDesc} to SharePoint: ${why}. It's saved on this device.`);
   }
 }
 
@@ -2181,7 +2184,13 @@ async function syncJobsUpsert(jobList){
   for(const job of jobList){
     try{
       if(job._spItemId){
-        await spUpdateItem(jobsListId, job._spItemId, jobToFields(job));
+        try{ await spUpdateItem(jobsListId, job._spItemId, jobToFields(job)); }
+        catch(e){
+          if(e && e.status===404){   // the SharePoint copy is gone (e.g. cleared by a re-import): save it again as new
+            const created = await spCreateItem(jobsListId, jobToFields(job));
+            job._spItemId = created.id; job.id = created.id; saveAll();
+          } else throw e;
+        }
       } else {
         const created = await spCreateItem(jobsListId, jobToFields(job));
         job._spItemId = created.id;
