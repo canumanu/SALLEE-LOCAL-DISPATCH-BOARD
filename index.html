@@ -393,6 +393,7 @@
   .job-driver .jd-x{cursor:pointer;opacity:.7;padding:0 3px;} .job-driver .jd-x:hover{opacity:1;}
   .job-card.drv-over{outline:2px solid #c9951a;outline-offset:1px;}
   .drv-warn{background:#fbe3df;color:#a23b2e;border-radius:4px;padding:1px 5px;margin-bottom:4px;font-size:9.5px;font-weight:700;}
+  .pool-chip .pc-x{margin-left:6px;opacity:0;cursor:pointer;color:#a23b2e;transition:opacity .12s;} .pool-chip:hover .pc-x{opacity:.85;} .pool-chip .pc-x:hover{opacity:1;}
 </style>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2212%22%20fill%3D%22%231b3a6b%22/%3E%3Cpath%20d%3D%22M8%2020h30v22H8z%22%20fill%3D%22%23f4efe0%22/%3E%3Cpath%20d%3D%22M38%2027h11l7%208v7H38z%22%20fill%3D%22%23e0b84a%22/%3E%3Cpath%20d%3D%22M42%2030h6l4%205h-10z%22%20fill%3D%22%231b3a6b%22/%3E%3Ccircle%20cx%3D%2219%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3Ccircle%20cx%3D%2246%22%20cy%3D%2244%22%20r%3D%226%22%20fill%3D%22%23222%22%20stroke%3D%22%23f4efe0%22%20stroke-width%3D%222%22/%3E%3C/svg%3E">
 </head>
@@ -794,10 +795,18 @@ function absMinutesToDateTimeDisplay(absMin){ return new Date(absMin*60000).toLo
    The driver list on top holds every driver. Drag a name onto a job card to put that driver on that job,
    or onto a truck's day to put him on all of that day's jobs on that truck. A driver can be on jobs under
    different trucks the same day; dropping never removes him from anywhere else. */
+// Drivers who left are kept in the roster as 'INACTIVE' (their old jobs keep the name) but drop out of the list.
 function rosterNames(){
-  const set = new Set(roster.map(r=>r.name));
-  jobs.forEach(j=>{ if(j.driver) set.add(j.driver); });
+  const gone = new Set(roster.filter(r=>r.group==='INACTIVE').map(r=>r.name));
+  const set = new Set(roster.filter(r=>r.group!=='INACTIVE').map(r=>r.name));
+  jobs.forEach(j=>{ if(j.driver && !gone.has(j.driver)) set.add(j.driver); });
   return [...set].sort((a,b)=>a.localeCompare(b));
+}
+function removeDriverFromList(name){
+  let r = roster.find(x=>x.name===name);
+  if(!r){ r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:'INACTIVE'}; roster.push(r); }
+  else r.group = 'INACTIVE';
+  saveAll(); render(); syncRecordUpsert(r, rosterToFields(r));
 }
 function truckDisplay(t){ return t ? (t.name1||'Truck') : ''; }
 function rosterToFields(r){
@@ -814,18 +823,24 @@ function strip(){
   el.innerHTML = '<b>Drivers</b> <span class="pool-hint">drag a name onto a job (or onto a truck\'s day)</span>' +
     '<div class="pool">' + rosterNames().map(n=>{
       const isOff = off.has(n), c = count[n]||0;
-      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}</span>`;
+      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}<b class="pc-x" title="Remove from the list">×</b></span>`;
     }).join('') + '<button class="pool-add" id="poolAdd" title="Add a driver">+ driver</button></div>';
   el.querySelectorAll('.pool-chip').forEach(ch=>{
     ch.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('application/x-driver', JSON.stringify({name:ch.dataset.n})); e.dataTransfer.effectAllowed='copy'; });
   });
+  el.querySelectorAll('.pc-x').forEach(x=>x.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const nm = x.closest('.pool-chip').dataset.n;
+    showConfirm(`Remove ${nm} from the driver list? Jobs they already worked keep their name; add the name again with + driver to bring them back.`, ()=>removeDriverFromList(nm), 'Remove');
+  }));
   document.getElementById('poolAdd').addEventListener('click', ()=>{
     const nm = (prompt('New driver name:')||'').trim(); if(!nm) return;
     addRosterName(nm, 'LOCAL'); render();
   });
 }
 function addRosterName(name, group){
-  if(roster.some(r=>r.name.toLowerCase()===name.toLowerCase())) return null;
+  const old = roster.find(r=>r.name.toLowerCase()===name.toLowerCase());
+  if(old){ if(old.group==='INACTIVE'){ old.group = group||'LOCAL'; saveAll(); syncRecordUpsert(old, rosterToFields(old)); } return null; }
   const r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:group||'LOCAL'};
   roster.push(r); saveAll(); syncRecordUpsert(r, rosterToFields(r)); return r;
 }
@@ -1389,7 +1404,7 @@ function openJobModal(jobId, date, driverId){
     document.getElementById('jobTechnician').value = job.technician||'';
     updateTechnicianRowVisibility();
     populateDriverSelect(job.assignedDriverId);
-    document.getElementById('jobDriverName').value = job.driver||'';
+    { const ds = document.getElementById('jobDriverName'); if(job.driver && ![...ds.options].some(o=>o.value===job.driver)) ds.add(new Option(job.driver + ' (not on list)', job.driver)); ds.value = job.driver||''; }
     document.getElementById('jobCustomer').value = job.customer||'';
     setLocationField('Origin', job.origin);
     document.getElementById('jobOriginFarm').value = job.originFarm||'';
@@ -2879,7 +2894,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       }
       const oldIds = new Set(old.map(j=>j.id));
       jobs = jobs.filter(j=>!oldIds.has(j.id));
-      roster = roster.filter(x=>x._spItemId);   // drop names that only ever lived in this browser so they get saved properly
+      roster = roster.filter(x=>x._spItemId || x.group==='INACTIVE');   // drop names that only ever lived in this browser so they get saved properly
     }
     // 3) build the new jobs
     const fresh = r.jobs.map(pj=>{
