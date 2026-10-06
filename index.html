@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -683,6 +684,7 @@ const LS_ROSTER='sallee_local_roster_v2';
 
 let drivers = JSON.parse(localStorage.getItem(LS_DRIVERS) || 'null') || DEFAULT_DRIVERS;
 let jobs = JSON.parse(localStorage.getItem(LS_JOBS) || 'null') || [];
+let connectError = '';
 let assigns = JSON.parse(localStorage.getItem(LS_ASSIGN) || 'null') || [];   // who drives which truck: {id,truckId,date,driver,kind:'day'|'onward'}
 let roster = JSON.parse(localStorage.getItem(LS_ROSTER) || 'null') || [];     // driver names: {id,name,group}
 let jobIdCounter = jobs.reduce((m,j)=>Math.max(m, parseInt((j.id||'j0').replace('j',''))||0), 0) + 1;
@@ -704,7 +706,7 @@ function saveAll(){
   localStorage.setItem(LS_ASSIGN, JSON.stringify(assigns));
   localStorage.setItem(LS_ROSTER, JSON.stringify(roster));
   localStorage.setItem(LS_WEEKSTART, weekStart.toISOString());
-  if(!syncEnabled){
+  if(!syncEnabled && !connectError){
     document.getElementById('statusNote').textContent = 'Saved locally ' + new Date().toLocaleTimeString();
   }
 }
@@ -1945,12 +1947,22 @@ async function spListItems(listId, from, to, rawFilter){
     // lets the query run even if JobDate isn't indexed yet (fine under 5,000 items; index it for speed)
     opts = {headers:{'Prefer':'HonorNonIndexedQueriesWarningMayFailRandomly'}};
   }
-  while(url){
-    const page = await graphFetch(url, opts);
-    results.push(...(page.value||[]));
-    url = page['@odata.nextLink'] || null;
+  try{
+    while(url){
+      const page = await graphFetch(url, opts);
+      results.push(...(page.value||[]));
+      url = page['@odata.nextLink'] || null;
+    }
+    return results;
+  }catch(err){
+    if(!(rawFilter || (from && to)) || !(err.status===400 || err.status===501 || err.status===422)) throw err;
+    console.warn('Filtered read rejected, reading the whole list instead', err.message);
+    const all = [];
+    let u = `/sites/${sid}/lists/${listId}/items?expand=fields&$top=500`;
+    while(u){ const pg = await graphFetch(u); all.push(...(pg.value||[])); u = pg['@odata.nextLink'] || null; }
+    if(rawFilter){ const m = /JobType eq '(\w+)'/.exec(rawFilter); return all.filter(it=>(it.fields||{}).JobType===(m&&m[1])); }
+    return all.filter(it=>{ const d=(it.fields||{}).JobDate||''; return d>=from && d<=to; });
   }
-  return results;
 }
 async function spCreateItem(listId, fields){
   const sid = await resolveSite();
@@ -2163,13 +2175,14 @@ async function startSyncedSession(){
     driversListId = await findOrCreateList(DRIVERS_LIST_NAME, DRIVERS_COLUMNS);
     jobsListId = await findOrCreateList(JOBS_LIST_NAME, JOBS_COLUMNS);
     await pullFromSharePoint();
-    syncEnabled = true;
+    syncEnabled = true; connectError = '';
     isViewOnly = false;
     updateSyncStatus('Synced with SharePoint · ' + new Date().toLocaleTimeString());
     startPolling();
   }catch(err){
     console.error('SharePoint sync failed', err);
-    updateSyncStatus('Could not connect to SharePoint — showing locally saved data', true);
+    connectError = String((err && err.message) || err).replace(/\s+/g,' ').slice(0,160);
+    updateSyncStatus('Could not connect to SharePoint: ' + connectError, true);
   }
 }
 
