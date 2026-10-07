@@ -480,9 +480,9 @@
         <input id="jobTechnician" placeholder="e.g. John Reyes">
       </div>
     </div>
-    <label>Truck</label>
-    <select id="jobAssignDriver"></select>
     <label>Driver</label>
+    <select id="jobAssignDriver"></select>
+    <label>Truck</label>
     <select id="jobDriverName"></select>
     <div id="repeatThroughRow" class="modal-row">
       <div>
@@ -567,24 +567,24 @@
 
 <div class="modal-overlay" id="driverModalOverlay">
   <div class="modal">
-    <h2 id="driverModalTitle">Add Truck</h2>
+    <h2 id="driverModalTitle">Add Driver</h2>
     <div class="modal-row">
       <div>
-        <label>Truck name</label>
-        <input id="drvName1" placeholder="e.g. TRUCK 4">
+        <label>Driver name</label>
+        <input id="drvName1" placeholder="e.g. CAPETILLO C.">
       </div>
       <div>
-        <label>Note (optional)</label>
-        <input id="drvName2" placeholder="e.g. sleeper">
+        <label>Second driver / note</label>
+        <input id="drvName2" placeholder="e.g. helper">
       </div>
     </div>
     <div class="modal-row">
       <div>
-        <label>Truck #</label>
+        <label>Usual truck # (shown in the header)</label>
         <input id="drvTruck" placeholder="e.g. 657">
       </div>
       <div>
-        <label>Trailer #</label>
+        <label>Usual trailer #</label>
         <input id="drvTrailer" placeholder="e.g. 185A+">
       </div>
     </div>
@@ -808,11 +808,11 @@ const DRIVER_OVERLAP_MIN = 60;   // two loads for one driver closer than this co
 function findDriverConflict(name, date, time, excludeIds){
   const t = toMin(time);
   if(!name || t==null) return null;
-  return jobs.find(j=> !excludeIds.includes(j.id) && j.date===date && j.driver===name && j.type!=='vacation' && toMin(j.time)!=null && Math.abs(toMin(j.time)-t) < DRIVER_OVERLAP_MIN) || null;
+  return jobs.find(j=> !excludeIds.includes(j.id) && j.date===date && j.truck===name && j.type!=='vacation' && toMin(j.time)!=null && Math.abs(toMin(j.time)-t) < DRIVER_OVERLAP_MIN) || null;
 }
 function conflictText(name, c){
   const tr = drivers.find(d=>d.id===c.assignedDriverId);
-  return `${name} is already on a job at ${formatTimeDisplay(c.time)} (${truckDisplay(tr)||'no truck'}: ${c.origin||'?'} \u2192 ${c.destination||'?'}).`;
+  return `${name} is already on a job at ${formatTimeDisplay(c.time)} (${truckDisplay(tr)||'no driver'}: ${c.origin||'?'} \u2192 ${c.destination||'?'}).`;
 }
 
 /* Origins/destinations on the local board are free text with autocomplete (farms, tracks, clinics...).
@@ -823,40 +823,43 @@ function getTurnaroundWarning(job){ return {status:'none'}; }
 function formatMinutesDuration(mins){ if(mins < 60) return `${mins}m`; const h=Math.floor(mins/60), m=mins%60; return m?`${h}h ${m}m`:`${h}h`; }
 function absMinutesToDateTimeDisplay(absMin){ return new Date(absMin*60000).toLocaleString(); }
 
-/* ===== Trucks are the columns; drivers are assigned per JOB =====
-   The driver list on top holds every driver. Drag a name onto a job card to put that driver on that job,
-   or onto a truck's day to put him on all of that day's jobs on that truck. A driver can be on jobs under
-   different trucks the same day; dropping never removes him from anywhere else. */
-// Drivers who left are kept in the roster as 'INACTIVE' (their old jobs keep the name) but drop out of the list.
+/* ===== Drivers are the columns (they stay put); trucks are assigned per JOB =====
+   The truck list on top holds every truck. Drag a truck onto a job card to put that truck on that job,
+   or onto a driver's day to put it on all of that day's jobs. A truck can be on jobs under different drivers
+   the same day; dropping never removes it from anywhere else. */
+// Retired trucks are kept in the list as 'INACTIVE' (old jobs keep the name) but drop out of the list.
 function rosterNames(){
   const gone = new Set(roster.filter(r=>r.group==='INACTIVE').map(r=>r.name));
   const set = new Set(roster.filter(r=>r.group!=='INACTIVE').map(r=>r.name));
-  jobs.forEach(j=>{ if(j.driver && !gone.has(j.driver)) set.add(j.driver); });
-  return [...set].sort((a,b)=>a.localeCompare(b));
+  jobs.forEach(j=>{ if(j.truck && !gone.has(j.truck)) set.add(j.truck); });
+  return [...set].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
 }
-function removeDriverFromList(name){
+function truckUnits(name){ const r = roster.find(x=>x.name===name); return (r && r.units) || ''; }
+function removeDriverFromList(name){   // retire a truck from the list
   let r = roster.find(x=>x.name===name);
   if(!r){ r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:'INACTIVE'}; roster.push(r); }
   else r.group = 'INACTIVE';
   saveAll(); render(); syncRecordUpsert(r, rosterToFields(r));
 }
-function truckDisplay(t){ return t ? (t.name1||'Truck') : ''; }
+function truckDisplay(t){ return t ? (t.name1||'Driver') : ''; }
 function rosterToFields(r){
-  return {Title:`DRIVER ${r.name}`.slice(0,255), JobDate:'', DriverId:'', SortOrder:0, JobType:'roster', Customer:r.name, LoadType:r.group||''};
+  return {Title:`TRUCK ${r.name}`.slice(0,255), JobDate:'', DriverId:'', SortOrder:0, JobType:'trucklist', Customer:r.name, LoadType:r.group||'', Origin:r.units||''};
 }
 function strip(){
   const el = document.getElementById('todayStrip'); if(!el) return;
   const today = fmtDate(new Date());
   const off = new Set(), count = {};
   jobs.forEach(j=>{
-    if(j.date!==today || !j.driver) return;
-    if(j.type==='vacation') off.add(j.driver); else count[j.driver] = (count[j.driver]||0) + 1;
+    if(j.date!==today) return;
+    if(j.type==='vacation'){ const d = drivers.find(x=>x.id===j.assignedDriverId); if(d) off.add(d.name1); }
+    else if(j.truck) count[j.truck] = (count[j.truck]||0) + 1;
   });
-  el.innerHTML = '<b>Drivers</b> <span class="pool-hint">' + (pickedDriver ? 'tap a job to give it to '+escapeHtml(pickedDriver)+' (tap the name again to put it down)' : 'drag a name onto a job, or tap a name then tap a job') + '</span>' +
+  el.innerHTML = '<b>Trucks</b> <span class="pool-hint">' + (pickedDriver ? 'tap a job to put '+escapeHtml(pickedDriver)+' on it (tap the truck again to put it down)' : 'drag a truck onto a job, or tap a truck then tap a job') + '</span>' +
     '<div class="pool">' + rosterNames().map(n=>{
-      const isOff = off.has(n), c = count[n]||0;
-      return `<span class="pool-chip${isOff?' off':''}${c?' busy':''}${pickedDriver===n?' sel':''}" draggable="true" data-n="${escapeHtml(n)}" title="${isOff?'Off today':(c? c+' job(s) today':'No jobs today')}">${escapeHtml(n)}${isOff?' · off':(c?' · '+c:'')}<b class="pc-x" title="Remove from the list">×</b></span>`;
-    }).join('') + '<button class="pool-add" id="poolAdd" title="Add a driver">+ driver</button></div>';
+      const c = count[n]||0, u = truckUnits(n);
+      return `<span class="pool-chip${c?' busy':''}${pickedDriver===n?' sel':''}" draggable="true" data-n="${escapeHtml(n)}" title="${escapeHtml(u||'')}${u?' · ':''}${c? c+' job(s) today':'No jobs today'}">${escapeHtml(n)}${c?' · '+c:''}<b class="pc-x" title="Remove from the list">×</b></span>`;
+    }).join('') + '<button class="pool-add" id="poolAdd" title="Add a truck">+ truck</button></div>' +
+    (off.size ? '<div class="pool-hint" style="margin-top:4px">Off today: ' + [...off].map(escapeHtml).join(', ') + '</div>' : '');
   el.querySelectorAll('.pool-chip').forEach(ch=>{
     ch.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('application/x-driver', JSON.stringify({name:ch.dataset.n})); e.dataTransfer.effectAllowed='copy'; });
   });
@@ -864,17 +867,18 @@ function strip(){
   el.querySelectorAll('.pc-x').forEach(x=>x.addEventListener('click', (e)=>{
     e.stopPropagation();
     const nm = x.closest('.pool-chip').dataset.n;
-    showConfirm(`Remove ${nm} from the driver list? Jobs they already worked keep their name; add the name again with + driver to bring them back.`, ()=>removeDriverFromList(nm), 'Remove');
+    showConfirm(`Remove ${nm} from the truck list? Jobs it already did keep the name; add it again with + truck to bring it back.`, ()=>removeDriverFromList(nm), 'Remove');
   }));
   document.getElementById('poolAdd').addEventListener('click', ()=>{
-    const nm = (prompt('New driver name:')||'').trim(); if(!nm) return;
-    addRosterName(nm, 'LOCAL'); render();
+    const nm = (prompt('New truck name (e.g. TRUCK 4):')||'').trim(); if(!nm) return;
+    const units = (prompt('Truck / trailer numbers (optional, e.g. 657 / 185A+):')||'').trim();
+    addRosterName(nm, 'LOCAL', units); render();
   });
 }
-function addRosterName(name, group){
+function addRosterName(name, group, units){
   const old = roster.find(r=>r.name.toLowerCase()===name.toLowerCase());
-  if(old){ if(old.group==='INACTIVE'){ old.group = group||'LOCAL'; saveAll(); syncRecordUpsert(old, rosterToFields(old)); } return null; }
-  const r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:group||'LOCAL'};
+  if(old){ if(old.group==='INACTIVE'){ old.group = group||'LOCAL'; if(units) old.units = units; saveAll(); syncRecordUpsert(old, rosterToFields(old)); } return null; }
+  const r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:group||'LOCAL', units:units||''};
   roster.push(r); saveAll(); syncRecordUpsert(r, rosterToFields(r)); return r;
 }
 async function syncRecordUpsert(rec, fields){
@@ -887,7 +891,7 @@ async function syncRecordUpsert(rec, fields){
 }
 function setJobDriver(jobList, name){
   if(!jobList.length) return;
-  jobList.forEach(j=>{ j.driver = name; });
+  jobList.forEach(j=>{ j.truck = name; });
   saveAll(); render(); syncJobsUpsert(jobList);
 }
 let pickedDriver = null;   // tap a name in the list to pick it up, then tap job cards (or a truck's empty day space)
@@ -899,14 +903,14 @@ function pickDriver(name){
 }
 function assignToJobChecked(job, name, fromJobId, copy){
   const src = fromJobId && fromJobId!==job.id && !copy ? jobs.find(x=>x.id===fromJobId) : null;
-  const go = ()=>{ setJobDriver([job], name); if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); } };
+  const go = ()=>{ setJobDriver([job], name); if(src){ src.truck = ''; saveAll(); render(); syncJobsUpsert([src]); } };
   const c = job.type!=='vacation' ? findDriverConflict(name, job.date, job.time, [job.id, fromJobId||'']) : null;
   if(c) showConfirm(conflictText(name, c) + ' Assign anyway?', go, 'Assign anyway'); else go();
 }
-function assignToCellChecked(truck, dateStr, name){
+function assignToCellChecked(truck, dateStr, name){   // 'truck' here is the driver column
   const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
-  if(!list.length){ showToast('No jobs on this truck that day. Tap a job card instead.'); return; }
-  const go = ()=>{ setJobDriver(list, name); showToast(`${name} \u2192 ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok'); };
+  if(!list.length){ showToast('No jobs for this driver that day. Tap a job card instead.'); return; }
+  const go = ()=>{ setJobDriver(list, name); showToast(`${name} \u2192 ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
   const ids = list.map(j=>j.id);
   let clash = null; for(const j of list){ clash = findDriverConflict(name, dateStr, j.time, ids); if(clash) break; }
   if(clash) showConfirm(conflictText(name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
@@ -925,8 +929,8 @@ function attachDriverDrop(td, truck, dateStr){
     const d = readDriverDrop(e); if(!d) return;
     e.preventDefault();
     const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
-    if(!list.length){ showToast('No jobs on this truck that day. Drop the name on a job card.'); return; }
-    const go = ()=>{ setJobDriver(list, d.name); showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} on ${truckDisplay(truck)}`, 'ok'); };
+    if(!list.length){ showToast('No jobs for this driver that day. Drop the truck on a job card.'); return; }
+    const go = ()=>{ setJobDriver(list, d.name); showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
     const ids = list.map(j=>j.id);
     let clash = null; for(const j of list){ clash = findDriverConflict(d.name, dateStr, j.time, ids); if(clash) break; }
     if(clash) showConfirm(conflictText(d.name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
@@ -1049,7 +1053,7 @@ function renderHeadRow(sortedDrivers){
 
   const addTh = document.createElement('th');
   addTh.className = 'add-driver-cell';
-  addTh.innerHTML = `<button title="Add truck">+</button>`;
+  addTh.innerHTML = `<button title="Add driver">+</button>`;
   addTh.querySelector('button').addEventListener('click', ()=>openDriverModal(null));
   row.appendChild(addTh);
 }
@@ -1142,9 +1146,9 @@ function buildJobCard(job){
     if(bits.length) body += `<div class="maint-detail">${escapeHtml(bits.join(' · '))}</div>`;
   }
   const custHtml = job.customer ? `<div class="cust">${escapeHtml(job.customer)}</div>` : '';
-  const driverHtml = job.driver ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(job.driver)}</span><b class="jd-x" title="Clear driver">×</b></div>` : '';
+  const driverHtml = job.truck ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(job.truck)}</span><b class="jd-x" title="Clear truck">×</b></div>` : '';
   let warnHtml = '';
-  if(job.driver && job.type!=='vacation'){ const c = findDriverConflict(job.driver, job.date, job.time, [job.id]); if(c){ const tr = drivers.find(d=>d.id===c.assignedDriverId); warnHtml = `<div class="drv-warn" title="${escapeHtml(conflictText(job.driver, c))}">\u26a0 also on ${escapeHtml(truckDisplay(tr)||'another job')} at ${escapeHtml(formatTimeDisplay(c.time))}</div>`; } }
+  if(job.truck && job.type!=='vacation'){ const c = findDriverConflict(job.truck, job.date, job.time, [job.id]); if(c){ const tr = drivers.find(d=>d.id===c.assignedDriverId); warnHtml = `<div class="drv-warn" title="${escapeHtml(conflictText(job.truck, c))}">\u26a0 also on ${escapeHtml(truckDisplay(tr)||'another job')} at ${escapeHtml(formatTimeDisplay(c.time))}</div>`; } }
   body += driverHtml + warnHtml + custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
   if(!body){ body = `<div class="meta">(click to edit)</div>`; }
   card.innerHTML = body;
@@ -1167,7 +1171,7 @@ function buildJobCard(job){
   const jd = card.querySelector('.job-driver');
   if(jd){
     jd.querySelector('.jd-x').addEventListener('click', (e)=>{ e.stopPropagation(); setJobDriver([job], ''); });
-    jd.addEventListener('dragstart', (e)=>{ e.stopPropagation(); e.dataTransfer.setData('application/x-driver', JSON.stringify({name:job.driver, fromJob:job.id})); e.dataTransfer.effectAllowed='copyMove'; });
+    jd.addEventListener('dragstart', (e)=>{ e.stopPropagation(); e.dataTransfer.setData('application/x-driver', JSON.stringify({name:job.truck, fromJob:job.id})); e.dataTransfer.effectAllowed='copyMove'; });
   }
   card.addEventListener('dragover', (e)=>{ if(e.dataTransfer.types.includes('application/x-driver')){ e.preventDefault(); e.stopPropagation(); card.classList.add('drv-over'); } });
   card.addEventListener('dragleave', ()=>card.classList.remove('drv-over'));
@@ -1177,7 +1181,7 @@ function buildJobCard(job){
     e.preventDefault(); e.stopPropagation();
     if(job.type==='vacation' && !d.fromJob){ /* allow: marks whose OFF card it is */ }
     const src = d.fromJob && d.fromJob!==job.id && !e.altKey ? jobs.find(x=>x.id===d.fromJob) : null;
-    const go = ()=>{ setJobDriver([job], d.name); if(src){ src.driver = ''; saveAll(); render(); syncJobsUpsert([src]); } };
+    const go = ()=>{ setJobDriver([job], d.name); if(src){ src.truck = ''; saveAll(); render(); syncJobsUpsert([src]); } };
     const c = job.type!=='vacation' ? findDriverConflict(d.name, job.date, job.time, [job.id, d.fromJob||'']) : null;
     if(c) showConfirm(conflictText(d.name, c) + ' Assign anyway?', go, 'Assign anyway'); else go();
   });
@@ -1455,7 +1459,7 @@ function populateDriverSelect(selectedId){ /* trucks */
     getSortedDrivers().map(d=>`<option value="${d.id}">${escapeHtml(driverLabel(d))}${d.location? ' ['+d.location+']':''}</option>`).join('');
   sel.value = selectedId || '';
   const dsel = document.getElementById('jobDriverName');
-  dsel.innerHTML = '<option value="">— No driver —</option>' + rosterNames().map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  dsel.innerHTML = '<option value="">— No truck —</option>' + rosterNames().map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
 }
 
 function openJobModal(jobId, date, driverId){
@@ -1473,7 +1477,7 @@ function openJobModal(jobId, date, driverId){
     document.getElementById('jobTechnician').value = job.technician||'';
     updateTechnicianRowVisibility();
     populateDriverSelect(job.assignedDriverId);
-    { const ds = document.getElementById('jobDriverName'); if(job.driver && ![...ds.options].some(o=>o.value===job.driver)) ds.add(new Option(job.driver + ' (not on list)', job.driver)); ds.value = job.driver||''; }
+    { const ds = document.getElementById('jobDriverName'); if(job.truck && ![...ds.options].some(o=>o.value===job.truck)) ds.add(new Option(job.truck + ' (not on list)', job.truck)); ds.value = job.truck||''; }
     document.getElementById('jobCustomer').value = job.customer||'';
     setLocationField('Origin', job.origin);
     document.getElementById('jobOriginFarm').value = job.originFarm||'';
@@ -1619,13 +1623,13 @@ document.getElementById('jobSaveBtn').addEventListener('click', ()=>{
     loadType: document.getElementById('jobLoadType').value,
     loadBoardRef: document.getElementById('jobLoadBoardRef').value.trim(),
     notes: document.getElementById('jobNotes').value.trim(),
-    driver: document.getElementById('jobDriverName').value,
+    truck: document.getElementById('jobDriverName').value,
   };
   const selectedDriverId = document.getElementById('jobAssignDriver').value || null;
   let savedJobs = [];
-  if(data.driver && data.type!=='vacation'){
-    const dc = findDriverConflict(data.driver, editingJobId ? (jobs.find(j=>j.id===editingJobId)||{}).date : (document.getElementById('jobStartDate').value || pendingDate), data.time, editingJobId ? [editingJobId] : []);
-    if(dc){ showToast(conflictText(data.driver, dc) + ' Pick a different time or driver.'); return; }
+  if(data.truck && data.type!=='vacation'){
+    const dc = findDriverConflict(data.truck, editingJobId ? (jobs.find(j=>j.id===editingJobId)||{}).date : (document.getElementById('jobStartDate').value || pendingDate), data.time, editingJobId ? [editingJobId] : []);
+    if(dc){ showToast(conflictText(data.truck, dc) + ' Pick a different time or truck.'); return; }
   }
 
   if(editingJobId){
@@ -1704,7 +1708,7 @@ function openDriverModal(driverId){
 
   if(driverId){
     const drv = drivers.find(d=>d.id===driverId);
-    title.textContent = 'Edit Truck';
+    title.textContent = 'Edit Driver';
     document.getElementById('drvName1').value = drv.name1||'';
     document.getElementById('drvName2').value = drv.name2||'';
     document.getElementById('drvTruck').value = drv.truck||'';
@@ -1712,7 +1716,7 @@ function openDriverModal(driverId){
     document.getElementById('drvLocation').value = drv.location||'';
     delBtn.style.display='inline-block';
   } else {
-    title.textContent = 'Add Truck';
+    title.textContent = 'Add Driver';
     document.getElementById('drvName1').value='';
     document.getElementById('drvName2').value='';
     document.getElementById('drvTruck').value='';
@@ -1757,7 +1761,7 @@ document.getElementById('drvSaveBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('drvDeleteBtn').addEventListener('click', ()=>{
-  showConfirm('Remove this truck? Any jobs currently on it will become unassigned.', ()=>{
+  showConfirm('Remove this driver column? Any jobs currently in it will become unassigned.', ()=>{
     const removedDriver = drivers.find(d=>d.id===editingDriverId);
     const affectedJobs = jobs.filter(j=>j.assignedDriverId===editingDriverId);
     affectedJobs.forEach(j=>{ j.assignedDriverId=null; });
@@ -1775,7 +1779,7 @@ document.getElementById('nextBtn').addEventListener('click', ()=>{ weekStart.set
 document.getElementById('todayBtn').addEventListener('click', ()=>{ weekStart = isCompact() ? startOfDay(new Date()) : mondayOf(new Date()); saveAll(); render(); pullSoon(); });
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
-  const data = {trucks:drivers, roster, jobs, weekStart: weekStart.toISOString()};
+  const data = {drivers, trucks:roster, jobs, weekStart: weekStart.toISOString()};
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2161,7 +2165,7 @@ function jobToFields(job){
     Title: `${job.origin||'?'} -> ${job.destination||'?'}`.slice(0,255),
     JobDate: job.date||'',
     DriverId: job.assignedDriverId||'',
-    DriverName: job.driver||'',
+    DriverName: job.truck||'',
     SortOrder: job.order||0,
     JobType: job.type||'normal',
     MainTime: job.maintTime||'',
@@ -2186,7 +2190,7 @@ function fieldsToJob(item){
     id: item.id,
     date: f.JobDate||'',
     assignedDriverId: f.DriverId||null,
-    driver: f.DriverName||'',
+    truck: f.DriverName||'',
     order: Number(f.SortOrder)||0,
     type: f.JobType||'normal',
     maintTime: f.MainTime||'',
@@ -2242,12 +2246,12 @@ async function pullFromSharePointInner(){
   const [driverItems, jobItemsRaw, rosterItems] = await Promise.all([
     spListItems(driversListId),
     spListItems(jobsListId, win.from, win.to),
-    spListItems(jobsListId, null, null, "fields/JobType eq 'roster'")
+    spListItems(jobsListId, null, null, "fields/JobType eq 'trucklist'")
   ]);
-  const jobItems = jobItemsRaw.filter(it=>{ const t=(it.fields||{}).JobType; return t!=='assign' && t!=='roster'; });
+  const jobItems = jobItemsRaw.filter(it=>{ const t=(it.fields||{}).JobType; return t!=='assign' && t!=='roster' && t!=='trucklist'; });
   {
     const keepR = roster.filter(r=>!r._spItemId);
-    roster = rosterItems.map(it=>{ const f=it.fields||{}; return {id:'s'+it.id, _spItemId:it.id, name:f.Customer||'', group:f.LoadType||''}; }).filter(r=>r.name).concat(keepR);
+    roster = rosterItems.map(it=>{ const f=it.fields||{}; return {id:'s'+it.id, _spItemId:it.id, name:f.Customer||'', group:f.LoadType||'', units:f.Origin||''}; }).filter(r=>r.name).concat(keepR);
   }
   loadedWindow = win;
 
@@ -2922,19 +2926,19 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
     // 1) drivers
     setStatus('Matching drivers…', 3);
     const byCol = {}; const created = [];
-    const colDriver = {};   // column -> driver (person) who sits in that truck on the chart
+    const colDriver = {};   // column -> that column's usual truck from the chart header
     r.drivers.forEach(d=>{
-      // chart headers look like "CAPETILLO C. #4": the person is the name, #4 is the truck
+      // chart headers look like "CAPETILLO C. #4": the person is the column, #4 is the usual truck
       const tag = /#\s*([A-Za-z0-9]+)/.exec(d.name1);
-      const person = d.name1.replace(/#\s*[A-Za-z0-9]+/,'').replace(/\s+/g,' ').trim();
-      const truckName = 'TRUCK ' + (tag ? tag[1] : (d.truck || person));
-      colDriver[d.col] = {person, group:d.location};
-      let ex = drivers.find(x=>driverKey(x.name1)===driverKey(truckName));
+      const person = d.name1.replace(/#\s*[A-Za-z0-9]+/,'').replace(/\s+/g,' ').trim() || d.name1;
+      const truckName = tag ? 'TRUCK ' + tag[1] : (d.truck ? 'TRUCK ' + d.truck : '');
+      colDriver[d.col] = {truck:truckName, units:[d.truck,d.trailer].filter(Boolean).join(' / '), group:d.location};
+      let ex = drivers.find(x=>driverKey(x.name1)===driverKey(person));
       if(!ex){
-        ex = {id:'d'+Date.now()+Math.random().toString(36).slice(2,6), name1:truckName, name2:'', truck:d.truck, trailer:d.trailer, location:d.location};
+        ex = {id:'d'+Date.now()+Math.random().toString(36).slice(2,6), name1:person, name2:'', truck:(tag?tag[1]:d.truck), trailer:d.trailer, location:d.location};
         drivers.push(ex); created.push(ex);
       } else {
-        if(!ex.truck) ex.truck = d.truck; if(!ex.trailer) ex.trailer = d.trailer; if(!ex.location) ex.location = d.location;
+        if(!ex.truck) ex.truck = tag?tag[1]:d.truck; if(!ex.trailer) ex.trailer = d.trailer; if(!ex.location) ex.location = d.location;
       }
       byCol[d.col] = ex;
     });
@@ -2974,7 +2978,7 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
         type:pj.type||'normal', customer:pj.customer||'', origin:pj.origin||'', destination:pj.destination||'',
         time:pj.time||'', timeIn:pj.timeIn||'', timeOut:pj.timeOut||'', loadType:pj.loadType||'', notes:pj.notes||'',
         originFarm:'', destinationFarm:'', additionalStops:'', maintTime:'', technician:'', loadBoardRef:'',
-        driver: ((pj.type||'normal')==='normal' || pj.type==='vacation') && colDriver[pj.driverCol] ? colDriver[pj.driverCol].person : ''};
+        truck: (pj.type||'normal')==='normal' && colDriver[pj.driverCol] ? colDriver[pj.driverCol].truck : ''};
     });
     // 4) save to SharePoint in batches of 20
     if(live){
@@ -2990,17 +2994,17 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
       if(failed) showToast(`${failed} job(s) didn't save to SharePoint. Run the import again with "Replace" ticked to fill the gaps.`);
     }
     jobs.push(...fresh);
-    // 5) drivers + who sits in which truck from the first day of the chart
+    // 5) the truck list (usual trucks from the chart header)
     {
       const newRoster = [];
       r.drivers.forEach(d=>{
-        const cd = colDriver[d.col], truck = byCol[d.col];
-        if(!cd || !truck) return;
-        if(cd.person && !roster.some(x=>x.name.toLowerCase()===cd.person.toLowerCase()) && !newRoster.some(x=>x.name.toLowerCase()===cd.person.toLowerCase()))
-          newRoster.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name:cd.person, group:cd.group||'LOCAL'});
+        const cd = colDriver[d.col];
+        if(!cd || !cd.truck) return;
+        const ex = roster.find(x=>x.name.toLowerCase()===cd.truck.toLowerCase()) || newRoster.find(x=>x.name.toLowerCase()===cd.truck.toLowerCase());
+        if(!ex) newRoster.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name:cd.truck, group:'LOCAL', units:cd.units});
       });
       if(live){
-        setStatus('Saving drivers…', 99);
+        setStatus('Saving trucks…', 99);
         const sid = await resolveSite();
         const reqs = newRoster.map(x=>({rec:x, fields:rosterToFields(x)}));
         for(const part of chunk(reqs,20)){
