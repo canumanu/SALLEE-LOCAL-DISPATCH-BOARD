@@ -401,6 +401,8 @@
   .job-card.drv-over{outline:2px solid #c9951a;outline-offset:1px;}
   .drv-warn{background:#fbe3df;color:#a23b2e;border-radius:4px;padding:1px 5px;margin-bottom:4px;font-size:9.5px;font-weight:700;}
   .pool-chip .pc-x{margin-left:6px;opacity:0;cursor:pointer;color:#a23b2e;transition:opacity .12s;} .pool-chip:hover .pc-x{opacity:.85;} .pool-chip .pc-x:hover{opacity:1;}
+  .pool-chip .pc-e{margin-left:6px;opacity:0;cursor:pointer;color:#0f3a2c;transition:opacity .12s;} .pool-chip:hover .pc-e{opacity:.85;} .pool-chip .pc-e:hover{opacity:1;}
+  @media (hover:none){.pool-chip .pc-e{display:none;}}
   .pool-chip.sel{background:#c9951a;color:#fff;border-color:#c9951a;}
   body.picking .job-card{outline:1.5px dashed #c9951a;outline-offset:1px;}
   body.picking td.job-cell{cursor:copy;}
@@ -812,7 +814,7 @@ function findDriverConflict(name, date, time, excludeIds){
 }
 function conflictText(name, c){
   const tr = drivers.find(d=>d.id===c.assignedDriverId);
-  return `${name} is already on a job at ${formatTimeDisplay(c.time)} (${truckDisplay(tr)||'no driver'}: ${c.origin||'?'} \u2192 ${c.destination||'?'}).`;
+  return `${truckLabel(name)} is already on a job at ${formatTimeDisplay(c.time)} (${truckDisplay(tr)||'no driver'}: ${c.origin||'?'} \u2192 ${c.destination||'?'}).`;
 }
 
 /* Origins/destinations on the local board are free text with autocomplete (farms, tracks, clinics...).
@@ -833,6 +835,16 @@ function rosterNames(){
   const set = new Set(roster.filter(r=>r.group!=='INACTIVE').map(r=>r.name));
   jobs.forEach(j=>{ if(j.truck && !gone.has(j.truck)) set.add(j.truck); });
   return [...set].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+}
+function truckLabel(name){ const u = truckUnits(name); return u || name || ''; }   // what the board shows: truck / trailer numbers if set
+function editTruck(name){
+  const cur = truckUnits(name);
+  const v = prompt(`Truck / trailer numbers shown for ${name} (e.g. 909 / 1501A):`, cur);
+  if(v===null) return;
+  let r = roster.find(x=>x.name===name);
+  if(!r){ r = {id:'r'+Date.now()+Math.random().toString(36).slice(2,5), name, group:'LOCAL', units:''}; roster.push(r); }
+  r.units = v.trim();
+  saveAll(); render(); syncRecordUpsert(r, rosterToFields(r));
 }
 function truckUnits(name){ const r = roster.find(x=>x.name===name); return (r && r.units) || ''; }
 function removeDriverFromList(name){   // retire a truck from the list
@@ -857,13 +869,14 @@ function strip(){
   el.innerHTML = '<b>Trucks</b> <span class="pool-hint">' + (pickedDriver ? 'tap a job to put '+escapeHtml(pickedDriver)+' on it (tap the truck again to put it down)' : 'drag a truck onto a job, or tap a truck then tap a job') + '</span>' +
     '<div class="pool">' + rosterNames().map(n=>{
       const c = count[n]||0, u = truckUnits(n);
-      return `<span class="pool-chip${c?' busy':''}${pickedDriver===n?' sel':''}" draggable="true" data-n="${escapeHtml(n)}" title="${escapeHtml(u||'')}${u?' · ':''}${c? c+' job(s) today':'No jobs today'}">${escapeHtml(n)}${c?' · '+c:''}<b class="pc-x" title="Remove from the list">×</b></span>`;
+      return `<span class="pool-chip${c?' busy':''}${pickedDriver===n?' sel':''}" draggable="true" data-n="${escapeHtml(n)}" title="${escapeHtml(n)}${u?' · '+escapeHtml(u):''} · ${c? c+' job(s) today':'No jobs today'}">${escapeHtml(truckLabel(n))}${c?' · '+c:''}<b class="pc-e" title="Edit truck / trailer numbers">✎</b><b class="pc-x" title="Remove from the list">×</b></span>`;
     }).join('') + '<button class="pool-add" id="poolAdd" title="Add a truck">+ truck</button></div>' +
     (off.size ? '<div class="pool-hint" style="margin-top:4px">Off today: ' + [...off].map(escapeHtml).join(', ') + '</div>' : '');
   el.querySelectorAll('.pool-chip').forEach(ch=>{
     ch.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('application/x-driver', JSON.stringify({name:ch.dataset.n})); e.dataTransfer.effectAllowed='copy'; });
   });
-  el.querySelectorAll('.pool-chip').forEach(ch=>ch.addEventListener('click', (e)=>{ if(e.target.closest('.pc-x')) return; pickDriver(ch.dataset.n); }));
+  el.querySelectorAll('.pool-chip').forEach(ch=>ch.addEventListener('click', (e)=>{ if(e.target.closest('.pc-x') || e.target.closest('.pc-e')) return; pickDriver(ch.dataset.n); }));
+  el.querySelectorAll('.pc-e').forEach(x=>x.addEventListener('click', (e)=>{ e.stopPropagation(); editTruck(x.closest('.pool-chip').dataset.n); }));
   el.querySelectorAll('.pc-x').forEach(x=>x.addEventListener('click', (e)=>{
     e.stopPropagation();
     const nm = x.closest('.pool-chip').dataset.n;
@@ -899,7 +912,7 @@ function pickDriver(name){
   pickedDriver = (pickedDriver===name) ? null : name;
   document.body.classList.toggle('picking', !!pickedDriver);
   strip();
-  if(pickedDriver) showToast(`${pickedDriver} picked up. Tap jobs to assign.`, 'ok');
+  if(pickedDriver) showToast(`${truckLabel(pickedDriver)} picked up. Tap jobs to assign.`, 'ok');
 }
 function assignToJobChecked(job, name, fromJobId, copy){
   const src = fromJobId && fromJobId!==job.id && !copy ? jobs.find(x=>x.id===fromJobId) : null;
@@ -910,7 +923,7 @@ function assignToJobChecked(job, name, fromJobId, copy){
 function assignToCellChecked(truck, dateStr, name){   // 'truck' here is the driver column
   const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
   if(!list.length){ showToast('No jobs for this driver that day. Tap a job card instead.'); return; }
-  const go = ()=>{ setJobDriver(list, name); showToast(`${name} \u2192 ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
+  const go = ()=>{ setJobDriver(list, name); showToast(`${truckLabel(name)} \u2192 ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
   const ids = list.map(j=>j.id);
   let clash = null; for(const j of list){ clash = findDriverConflict(name, dateStr, j.time, ids); if(clash) break; }
   if(clash) showConfirm(conflictText(name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
@@ -930,7 +943,7 @@ function attachDriverDrop(td, truck, dateStr){
     e.preventDefault();
     const list = jobs.filter(j=>j.date===dateStr && j.assignedDriverId===truck.id && j.type!=='vacation' && j.type!=='note');
     if(!list.length){ showToast('No jobs for this driver that day. Drop the truck on a job card.'); return; }
-    const go = ()=>{ setJobDriver(list, d.name); showToast(`${d.name} → ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
+    const go = ()=>{ setJobDriver(list, d.name); showToast(`${truckLabel(d.name)} → ${list.length} job${list.length>1?'s':''} for ${truckDisplay(truck)}`, 'ok'); };
     const ids = list.map(j=>j.id);
     let clash = null; for(const j of list){ clash = findDriverConflict(d.name, dateStr, j.time, ids); if(clash) break; }
     if(clash) showConfirm(conflictText(d.name, clash) + ' Assign anyway?', go, 'Assign anyway'); else go();
@@ -1146,7 +1159,7 @@ function buildJobCard(job){
     if(bits.length) body += `<div class="maint-detail">${escapeHtml(bits.join(' · '))}</div>`;
   }
   const custHtml = job.customer ? `<div class="cust">${escapeHtml(job.customer)}</div>` : '';
-  const driverHtml = job.truck ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(job.truck)}</span><b class="jd-x" title="Clear truck">×</b></div>` : '';
+  const driverHtml = job.truck ? `<div class="job-driver" draggable="true" title="Drag to another job to move; click × to clear"><span>${escapeHtml(truckLabel(job.truck))}</span><b class="jd-x" title="Clear truck">×</b></div>` : '';
   let warnHtml = '';
   if(job.truck && job.type!=='vacation'){ const c = findDriverConflict(job.truck, job.date, job.time, [job.id]); if(c){ const tr = drivers.find(d=>d.id===c.assignedDriverId); warnHtml = `<div class="drv-warn" title="${escapeHtml(conflictText(job.truck, c))}">\u26a0 also on ${escapeHtml(truckDisplay(tr)||'another job')} at ${escapeHtml(formatTimeDisplay(c.time))}</div>`; } }
   body += driverHtml + warnHtml + custHtml + routeHtml + additionalStopsHtml + metaHtml + horseHtml + notesHtml + lbRefHtml;
@@ -1459,7 +1472,7 @@ function populateDriverSelect(selectedId){ /* trucks */
     getSortedDrivers().map(d=>`<option value="${d.id}">${escapeHtml(driverLabel(d))}${d.location? ' ['+d.location+']':''}</option>`).join('');
   sel.value = selectedId || '';
   const dsel = document.getElementById('jobDriverName');
-  dsel.innerHTML = '<option value="">— No truck —</option>' + rosterNames().map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  dsel.innerHTML = '<option value="">— No truck —</option>' + rosterNames().map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(truckLabel(n))}${truckUnits(n)?' ('+escapeHtml(n)+')':''}</option>`).join('');
 }
 
 function openJobModal(jobId, date, driverId){
