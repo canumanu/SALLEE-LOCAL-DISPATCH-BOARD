@@ -716,11 +716,11 @@ const MAINTENANCE_LABELS={pm:'PM', safety_inspection:'Safety Inspection'};
 const REGION_ORDER = ['LOCAL','LOCAL_OTR','AGENT','PT',''];
 const REGION_DISPLAY = {LOCAL:'Local', LOCAL_OTR:'Local / OTR', AGENT:'Agent / Driver', PT:'Part-time', '':'Unassigned'};
 
-const LS_DRIVERS='sallee_local_trucks_v2';
-const LS_JOBS='sallee_local_jobs_v2';
+const LS_DRIVERS='sallee_local_drivers_v3';
+const LS_JOBS='sallee_local_jobs_v3';
 const LS_WEEKSTART='sallee_local_weekstart_v1';
 const LS_ASSIGN='sallee_local_assign_v2';
-const LS_ROSTER='sallee_local_roster_v2';
+const LS_ROSTER='sallee_local_trucklist_v3';
 
 let drivers = JSON.parse(localStorage.getItem(LS_DRIVERS) || 'null') || DEFAULT_DRIVERS;
 let jobs = JSON.parse(localStorage.getItem(LS_JOBS) || 'null') || [];
@@ -2256,7 +2256,11 @@ async function pullFromSharePointInner(){
   loadedWindow = win;
 
   if(driverItems.length){
-    drivers = driverItems.map(fieldsToDriver).filter(d=>d.id);
+    // old layout stored trucks as columns ("TRUCK 4"); they are not drivers, so hide them and clear them from the list
+    const all = driverItems.map(fieldsToDriver).filter(d=>d.id);
+    const stale = all.filter(d=>/^\s*TRUCK\b/i.test(d.name1));
+    drivers = all.filter(d=>!/^\s*TRUCK\b/i.test(d.name1));
+    if(stale.length && !isViewOnly){ (async()=>{ for(const d of stale){ try{ await spDeleteItem(driversListId, d._spItemId); }catch(_){ break; } } })(); }
   } else if(drivers.length){
     const idMap = await seedListToSharePoint(driversListId, drivers, driverToFields);
     // Repoint any jobs assigned via a driver's old temporary local id.
