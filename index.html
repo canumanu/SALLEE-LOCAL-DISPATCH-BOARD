@@ -2780,25 +2780,24 @@ function startDrone(){
 function pickVoice(){
   const synth = window.speechSynthesis; if(!synth) return null;
   const en = synth.getVoices().filter(v=>/^en/i.test(v.lang));
-  const prefs = [/Davis/i,/Guy/i,/Christopher/i,/Ryan/i,/Eric/i,/Brian/i,/Google UK English Male/i,/Daniel/i,/Alex/i,/Fred/i,/Male/i];
+  // friendly female voices first (Edge/Windows, Apple, Chrome), then anything that says female
+  const prefs = [/Aria/i,/Jenny/i,/Sonia/i,/Libby/i,/Michelle/i,/Samantha/i,/Ava\b/i,/Allison/i,/Zira/i,/Hazel/i,/Susan/i,/Karen/i,/Moira/i,/Tessa/i,/Victoria/i,/Google US English/i,/Google UK English Female/i,/Female/i];
   for(const p of prefs){ const v = en.find(x=>p.test(x.name)); if(v) return v; }
   return en[0] || null;
 }
+if(window.speechSynthesis){ try{ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = ()=>{}; }catch(e){} }
 function speakWelcome(name, onDone){
   const synth = window.speechSynthesis;
   let finished = false;
   const fin = ()=>{ if(!finished){ finished = true; onDone(); } };
-  if(!synth || typeof SpeechSynthesisUtterance === 'undefined'){ setTimeout(fin, 3500); return; }
+  if(!synth || typeof SpeechSynthesisUtterance === 'undefined'){ setTimeout(fin, 3000); return; }
   try{ synth.cancel(); }catch(e){}
   const voice = pickVoice();
-  const main = new SpeechSynthesisUtterance(`Welcome... ${name}.`);
-  main.rate = .7; main.pitch = .5; main.volume = 1; if(voice) main.voice = voice;
-  const echo = new SpeechSynthesisUtterance(`${name}...`);
-  echo.rate = .6; echo.pitch = .3; echo.volume = .22; if(voice) echo.voice = voice;
-  main.onend = ()=>{ setTimeout(()=>{ try{ synth.speak(echo); }catch(e){ fin(); } }, 350); };
-  main.onerror = fin; echo.onend = fin; echo.onerror = fin;
-  try{ synth.speak(main); }catch(e){ fin(); }
-  setTimeout(fin, 16000); // safety
+  const u = new SpeechSynthesisUtterance(`Welcome, ${name}!`);
+  u.lang = 'en-US'; u.rate = 1.0; u.pitch = 1.25; u.volume = 1; if(voice) u.voice = voice;
+  u.onend = fin; u.onerror = fin;
+  try{ synth.speak(u); }catch(e){ fin(); }
+  setTimeout(fin, 8000); // safety
 }
 function showWelcome(name, markSeen){
   const el = document.getElementById('welcome');
