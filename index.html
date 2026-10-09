@@ -35,6 +35,18 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--cream);color:var(--ink);}
+  /* ===== seasonal edge decorations (changes by week) ===== */
+  #season{position:fixed;inset:0;pointer-events:none;z-index:70;overflow:hidden;}
+  #season .edge{position:absolute;top:0;bottom:0;width:34px;}
+  #season .edge.l{left:0;background:linear-gradient(90deg,var(--sc,#c9951a33),transparent);}
+  #season .edge.r{right:0;background:linear-gradient(270deg,var(--sc,#c9951a33),transparent);}
+  #season .bot{position:absolute;left:0;right:0;bottom:0;height:8px;background:linear-gradient(0deg,var(--sc,#c9951a33),transparent);}
+  #season .p{position:absolute;top:-40px;line-height:1;opacity:.7;animation:seasonFall linear infinite;will-change:transform;}
+  #season .corner{position:absolute;bottom:2px;line-height:1;opacity:.95;}
+  @keyframes seasonFall{0%{transform:translate(0,-30px) rotate(0deg);}50%{transform:translate(10px,52vh) rotate(180deg);}100%{transform:translate(-6px,108vh) rotate(360deg);}}
+  @media (prefers-reduced-motion:reduce){ #season .p{animation:none;top:auto;} }
+  @media print{ #season{display:none;} }
+
 
   .topbar{
     background:var(--green-dark);
@@ -443,6 +455,7 @@
   <button class="btn ghost" id="signInBtn">Sign in with Microsoft</button>
   <button class="btn ghost" id="signOutBtn" style="display:none;">Sign out</button>
   <button class="btn" id="exportBtn">Export JSON</button>
+  <button class="btn ghost" id="seasonBtn" title="Seasonal decorations: click to change or turn off">🍂</button>
   <button class="btn" id="importBtn">Import Excel</button>
   <span class="status-note" id="statusNote">Saved locally in this browser</span>
 </div>
@@ -3048,6 +3061,86 @@ xlEl('xlGoBtn').addEventListener('click', async ()=>{
   }
 });
 
+
+/* ===== Seasonal edge decorations: the theme follows the current week automatically ===== */
+const SEASON_THEMES = {
+  fall:      {name:'Fall leaves',   icons:['🍂','🍁','🍃'],        corner:['🍁','🍂'], tint:'#c9701a40'},
+  halloween: {name:'Halloween',     icons:['🎃','👻','🦇','🕸️'],  corner:['🎃','👻'], tint:'#e8761c45'},
+  thanks:    {name:'Thanksgiving',  icons:['🦃','🌽','🍂','🥧'],  corner:['🦃','🌽'], tint:'#a5612840'},
+  holiday:   {name:'Holidays',      icons:['❄️','🎄','⭐','🎁'],  corner:['🎄','🎁'], tint:'#2f7a5540'},
+  newyear:   {name:'New Year',      icons:['🎆','🥂','✨','🎉'],  corner:['🎆','🥂'], tint:'#c9951a45'},
+  winter:    {name:'Winter',        icons:['❄️','⛄','❄️'],        corner:['⛄','❄️'], tint:'#6aa7d340'},
+  valentine: {name:'Valentine’s', icons:['💝','❤️','💕'],     corner:['💝','❤️'], tint:'#d9457a40'},
+  stpat:     {name:'St. Patrick’s', icons:['🍀','☘️','🌈'],   corner:['🍀','🌈'], tint:'#2f9e5a40'},
+  easter:    {name:'Easter',        icons:['🐣','🌷','🥚','🐰'],  corner:['🐰','🐣'], tint:'#b58ad940'},
+  spring:    {name:'Spring',        icons:['🌸','🌷','🦋','🌼'],  corner:['🌷','🦋'], tint:'#e58fb440'},
+  derby:     {name:'Derby week',    icons:['🌹','🏇','🐎','🏆'],  corner:['🌹','🐎'], tint:'#c4263d40'},
+  july4:     {name:'Fourth of July',icons:['🎆','🇺🇸','⭐','🎇'], corner:['🎆','🇺🇸'], tint:'#3a5fc440'},
+  summer:    {name:'Summer',        icons:['☀️','🌻','🦋','🍉'],  corner:['🌻','☀️'], tint:'#f2c43140'},
+  earlyfall: {name:'Early fall',    icons:['🍃','🍂','🌾'],        corner:['🌾','🍂'], tint:'#9a8a2f40'}
+};
+function easterDate(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1; return new Date(y,mo-1,da); }
+function seasonThemeFor(date){
+  const mon = mondayOf(date), y = mon.getFullYear();
+  const days = []; for(let i=0;i<7;i++){ const d = new Date(mon); d.setDate(d.getDate()+i); days.push(d); }
+  const has = (m,dd)=>days.some(d=>d.getMonth()===m-1 && d.getDate()===dd);
+  const hasDate = (dt)=>days.some(d=>d.toDateString()===dt.toDateString());
+  const nthThu = (yr,n)=>{ const f = new Date(yr,10,1); const off=(4-f.getDay()+7)%7; return new Date(yr,10,1+off+7*(n-1)); };
+  const derby = (()=>{ for(let d=1; d<=7; d++){ const x=new Date(days[3].getFullYear(),4,d); if(x.getDay()===6) return x; } })();
+  const ed = easterDate(days[3].getFullYear());
+  if(has(10,31)) return 'halloween';
+  if(hasDate(nthThu(days[3].getFullYear(),4))) return 'thanks';
+  if(has(12,25)) return 'holiday';
+  if(has(1,1)) return 'newyear';
+  if(has(2,14)) return 'valentine';
+  if(has(3,17)) return 'stpat';
+  if(derby && hasDate(derby)) return 'derby';
+  if(days.some(d=>Math.abs(d-ed)<=3*86400000)) return 'easter';
+  if(has(7,4)) return 'july4';
+  const m = days[3].getMonth()+1, dd = days[3].getDate();
+  if(m===12) return 'holiday';
+  if(m===1 || m===2 || (m===3 && dd<15)) return 'winter';
+  if(m===3 || m===4 || m===5 || m===6) return 'spring';
+  if(m===7 || m===8) return 'summer';
+  if(m===9) return 'earlyfall';
+  return 'fall';   // Oct, Nov
+}
+const LS_SEASON = 'sallee_local_season_v1';   // 'auto' | 'off' | theme key
+function seasonPref(){ try{ return localStorage.getItem(LS_SEASON) || 'auto'; }catch(_){ return 'auto'; } }
+function seasonSet(v){ try{ localStorage.setItem(LS_SEASON, v); }catch(_){} }
+function seasonRand(seed){ let x = seed*9301+49297; return ()=>{ x = (x*9301+49297)%233280; return x/233280; }; }
+function applySeason(){
+  let el = document.getElementById('season');
+  const pref = seasonPref();
+  const btn = document.getElementById('seasonBtn');
+  const key = pref==='auto' ? seasonThemeFor(new Date()) : pref;
+  if(pref==='off' || !SEASON_THEMES[key]){ if(el) el.remove(); if(btn) btn.textContent='◌'; return; }
+  const t = SEASON_THEMES[key];
+  if(btn){ btn.textContent = t.icons[0]; btn.title = 'Decorations: ' + t.name + (pref==='auto'?' (changes by week)':'') + ' · click to change'; }
+  if(!el){ el = document.createElement('div'); el.id = 'season'; document.body.appendChild(el); }
+  const phone = isCompact(), rnd = seasonRand(key.length*131 + t.icons.length);
+  const per = phone ? 5 : 9;
+  let html = '<div class="edge l"></div><div class="edge r"></div><div class="bot"></div>';
+  for(const side of ['l','r']){
+    for(let i=0;i<per;i++){
+      const ic = t.icons[Math.floor(rnd()*t.icons.length)], size = 13 + Math.floor(rnd()*11), off = Math.floor(rnd()*(phone?14:30)), dur = 16 + Math.floor(rnd()*16), delay = -Math.floor(rnd()*dur);
+      html += `<span class="p" style="${side==='l'?'left':'right'}:${off}px;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s">${ic}</span>`;
+    }
+  }
+  html += `<span class="corner" style="left:4px;font-size:${phone?20:30}px">${t.corner[0]}</span><span class="corner" style="right:4px;font-size:${phone?20:30}px">${t.corner[1]}</span>`;
+  el.style.setProperty('--sc', t.tint);
+  el.innerHTML = html;
+}
+document.getElementById('seasonBtn').addEventListener('click', ()=>{
+  const order = ['auto','off',...Object.keys(SEASON_THEMES)];
+  const cur = order.indexOf(seasonPref());
+  const next = order[(cur+1)%order.length];
+  seasonSet(next); applySeason();
+  showToast(next==='auto' ? 'Decorations: automatic (' + SEASON_THEMES[seasonThemeFor(new Date())].name + ' this week)' : next==='off' ? 'Decorations off' : 'Decorations: ' + SEASON_THEMES[next].name, 'ok');
+});
+applySeason();
+window.addEventListener('resize', ()=>{ clearTimeout(window.__seasonT); window.__seasonT = setTimeout(applySeason, 300); });
+setInterval(()=>{ if(seasonPref()==='auto') applySeason(); }, 6*3600*1000);
 
 initAuth();
 </script>
