@@ -44,7 +44,7 @@
   #season .p{position:absolute;top:-40px;line-height:1;opacity:.7;animation:seasonFall linear infinite;will-change:transform;}
   #season .corner{position:absolute;bottom:2px;line-height:1;opacity:.95;}
   @keyframes seasonFall{0%{transform:translate(0,-30px) rotate(0deg);}50%{transform:translate(10px,52vh) rotate(180deg);}100%{transform:translate(-6px,108vh) rotate(360deg);}}
-  @media (prefers-reduced-motion:reduce){ #season .p{animation:none;top:auto;} }
+  @media (prefers-reduced-motion:reduce){ #season .p{animation:none;top:var(--y,50%);} }
   @media print{ #season{display:none;} }
 
 
@@ -3123,7 +3123,7 @@ function applySeason(){
   for(const side of ['l','r']){
     for(let i=0;i<per;i++){
       const ic = t.icons[Math.floor(rnd()*t.icons.length)], size = 13 + Math.floor(rnd()*11), off = Math.floor(rnd()*(phone?14:30)), dur = 16 + Math.floor(rnd()*16), delay = -Math.floor(rnd()*dur);
-      html += `<span class="p" style="${side==='l'?'left':'right'}:${off}px;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s">${ic}</span>`;
+      html += `<span class="p" style="${side==='l'?'left':'right'}:${off}px;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s;--y:${Math.floor(rnd()*92)}%">${ic}</span>`;
     }
   }
   html += `<span class="corner" style="left:4px;font-size:${phone?20:30}px">${t.corner[0]}</span><span class="corner" style="right:4px;font-size:${phone?20:30}px">${t.corner[1]}</span>`;
